@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+vendor/siwc/packages/*/dist/
+.DS_Store
+.env*
+!.env.example
+coverage/
+*.log
+artifacts/
