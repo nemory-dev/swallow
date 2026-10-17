@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { describe, expect, it } from 'vitest';
 import { StudyCoach, buildCoachInput } from '../electron/coach.js';
 import { createDocument } from '../src/learning/document.js';
@@ -23,7 +24,7 @@ describe('학습 요청', () => {
     expect(input[0]!.content).toContain('다른 개념');
   });
   it('완료된 응답만 검증해 반환한다', async () => {
-    const coach = new StudyCoach({ streamResponse: async () => ({ text: guide }) });
+    const coach = new StudyCoach({ streamResponse: async request => qualityReply(request) ?? ({ text: guide }) });
     const result = await coach.run('guide', doc(), 'unit-0', () => {}, 'account-model');
     expect('question' in result).toBe(true);
   });
@@ -45,7 +46,7 @@ describe('학습 요청', () => {
     expect(coach.running).toBe(false);
   });
   it('저장된 회상 없이 피드백을 요청하지 않는다', async () => {
-    const coach = new StudyCoach({ streamResponse: async () => ({ text: guide }) });
+    const coach = new StudyCoach({ streamResponse: async request => qualityReply(request) ?? ({ text: guide }) });
     await expect(coach.run('feedback', doc(), 'unit-0', () => {}, 'account-model')).rejects.toThrow('회상');
   });
 });

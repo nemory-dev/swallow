@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,7 +13,8 @@ async function setup() {
   cleanup.push(() => rm(path, { recursive: true, force: true }));
   let calls = 0;
   const client = localProvider('account-model');
-  client.streamResponse = async () => {
+  client.streamResponse = async request => {
+    const checked = qualityReply(request); if (checked) return checked;
     calls++;
     return { text: JSON.stringify({ overview: '회상하기', keyPoints: [{ title: '기억', explanation: '꺼내기', quote: '회상한다.' }], question: '무엇을 하나요?' }) };
   };

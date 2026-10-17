@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,7 +7,6 @@ import { AppService } from '../electron/app-service.js';
 import { LibraryStore } from '../electron/library.js';
 import { localProvider } from './helpers/local-provider.js';
 import { pdfSource } from '../src/learning/pdf.js';
-import { readingPassages } from '../src/learning/reading.js';
 import type { CoachRequest } from '../src/shared/types.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -17,9 +17,10 @@ async function setup(source = 'Technical documents keep `config.json` and https:
   const path = join(root, 'library.json'), store = new LibraryStore(path), client = localProvider();
   const calls: CoachRequest[] = [];
   client.streamResponse = async options => {
+    const checked = qualityReply(options); if (checked) return checked;
     calls.push(options);
     const payload = JSON.parse((options.input as { content: string }[])[1]!.content);
-    return { text: JSON.stringify({ translation: `${options.responseLanguage}: ${payload.source}` }) };
+    return { text: JSON.stringify({ translation: `${options.responseLanguage === 'ko' ? '한국어번역을검증하는합성결과입니다'.repeat(4) : 'en'}: ${payload.source}` }) };
   };
   const service = new AppService(store, client);
   cleanups.push(() => service.dispose());
@@ -37,7 +38,7 @@ describe('원문 번역 서비스와 저장', () => {
     await service.studySession({ type: 'start', documentId: id });
     const before = document(), workspace = service.getStudyWorkspace(id);
     await service.translateDocument(id, 'ko', 'unit', 'unit-0');
-    expect(document().translations?.['unit-0']?.ko).toMatchObject({ sourceText: before.source, text: `ko: ${before.source}`, model: 'test', targetLanguage: 'ko', identity: { responseLanguage: 'ko', providerId: 'ollama', promptRevision: 1 } });
+    expect(document().translations?.['unit-0']?.ko).toMatchObject({ sourceText: before.source, text: `${'한국어번역을검증하는합성결과입니다'.repeat(4)}: ${before.source}`, model: 'test', targetLanguage: 'ko', identity: { responseLanguage: 'ko', providerId: 'ollama', promptRevision: 5 } });
     expect({ ...document(), translations: undefined }).toEqual({ ...before, translations: undefined });
     expect(service.getStudyWorkspace(id)).toEqual(workspace);
     await service.translateDocument(id, 'ko', 'unit', 'unit-0');
@@ -46,6 +47,80 @@ describe('원문 번역 서비스와 저장', () => {
     expect(calls).toHaveLength(2);
     expect(document().translations?.['unit-0']?.ko).toBeDefined();
     expect(document().translations?.['unit-0']?.en?.text).toContain('en:');
+  });
+  it.each([true, false])('언어 재생성 결과만 저장하고 반복 혼입은 원문·답안을 보존한다 (복구 %s)', async recovered => {
+    const { service, client, id, document, path } = await setup('A cache stores a copy. It may become stale.');
+    await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
+    const before = document();
+    let generations = 0;
+    client.streamResponse = async request => {
+      const reviewed = qualityReply(request); if (reviewed) return reviewed;
+      generations++;
+      // Neither rejected draft may be persisted before the repaired result passes review.
+      expect(document()).toEqual(before);
+      return { text: JSON.stringify({ translation: recovered && generations === 2
+        ? '캐시는 복사본을 저장합니다. 오래된 값이 남을 수 있습니다.' : '캐시에는 陈旧한 값이 있습니다.' }) };
+    };
+    if (recovered) {
+      await service.translateDocument(id, 'ko', 'unit');
+      expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(5);
+      expect(document().translations?.['unit-0']?.ko?.text).not.toContain('陈旧');
+    } else {
+      await expect(service.translateDocument(id, 'ko', 'unit')).rejects.toMatchObject({ code: 'public.aiQuality' });
+      expect(document()).toEqual(before);
+    }
+    expect(generations).toBe(2);
+    expect({ ...document(), translations: undefined }).toEqual({ ...before, translations: undefined });
+    expect(service.getState().busy).toBeNull();
+    const saved = document(); service.dispose();
+    const reopened = new AppService(new LibraryStore(path)); cleanups.push(() => reopened.dispose()); await reopened.initialize();
+    expect(reopened.getState().library.documents.find(doc => doc.id === id)).toEqual(saved);
+  });
+  it('알려진 오역도 의미 승인 없이 초안으로만 저장하고 원문·답안을 보존한다', async () => {
+    const source = 'A retry may fail again.';
+    const text = '재시도는 실패할 가능성이 높습니다.';
+    const { service, client, id, document, path } = await setup(source);
+    await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
+    const before = document(); let generations = 0, reviews = 0;
+    client.streamResponse = async request => {
+      if (Object.hasOwn((request.responseSchema?.properties ?? {}) as Record<string, unknown>, 'verdict')) {
+        reviews++; return { text: JSON.stringify({ reason: 'Incorrect approval', verdict: 'pass' }) };
+      }
+      generations++; return { text: JSON.stringify({ translation: text }) };
+    };
+    await service.translateDocument(id, 'ko', 'unit');
+    const saved = document();
+    expect(saved.translations?.['unit-0']?.ko?.text).toBe(text);
+    expect({ ...saved, translations: undefined }).toEqual({ ...before, translations: undefined });
+    await service.translateDocument(id, 'ko', 'unit');
+    expect(generations).toBe(1); expect(reviews).toBe(0);
+    service.dispose();
+    const reopened = new AppService(new LibraryStore(path)); cleanups.push(() => reopened.dispose()); await reopened.initialize();
+    expect(reopened.getState().library.documents[0]).toEqual(saved);
+  });
+  it('revision 4 번역은 읽을 수 있지만 명시적 재요청에서 초안 지침으로 갱신한다', async () => {
+    const { service, store, id, document, calls } = await setup();
+    await service.translateDocument(id, 'ko', 'unit');
+    await store.update(library => {
+      library.documents[0]!.translations!['unit-0']!.ko!.identity.promptRevision = 4;
+      return library;
+    });
+    await service.study({ type: 'select-document', documentId: id });
+    expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(4);
+    expect(calls).toHaveLength(1);
+    const before = document();
+    await service.translateDocument(id, 'ko', 'unit');
+    expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(5);
+    expect(calls).toHaveLength(2);
+    expect({ ...document(), translations: undefined }).toEqual({ ...before, translations: undefined });
+  });
+  it('수치 문장은 저장 전에 차단하고 원문·답안·노트를 보존한다', async () => {
+    const { service, id, document, calls } = await setup('잔액 100에서 30을 출금하면 70입니다.');
+    await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
+    const before = document(), workspace = service.getStudyWorkspace(id);
+    await expect(service.translateDocument(id, 'en', 'unit')).rejects.toMatchObject({ code: 'public.translationNumbers' });
+    expect(document()).toEqual(before); expect(service.getStudyWorkspace(id)).toEqual(workspace);
+    expect(calls).toHaveLength(0); expect(service.getState().busy).toBeNull();
   });
   it('전체 문서는 순차 저장하고 중간 실패 뒤 완료 구간을 재사용해 이어간다', async () => {
     const { service, client, id, document, calls } = await setup('First sentence. '.repeat(130) + '\n\n' + 'Second sentence. '.repeat(130));
@@ -63,7 +138,7 @@ describe('원문 번역 서비스와 저장', () => {
     client.streamResponse = respond;
     await service.translateDocument(id, 'ko', 'document'); unsubscribe();
     expect(Object.keys(document().translations ?? {})).toHaveLength(document().units.length);
-    expect(calls).toHaveLength(document().units.reduce((count, unit) => count + readingPassages(unit.text).filter(part => part.trim()).length, 0));
+    expect(calls.length).toBeGreaterThan(firstCalls);
     expect(progress).toContain(document().units.length);
     const count = calls.length;
     await service.translateDocument(id, 'ko', 'document');

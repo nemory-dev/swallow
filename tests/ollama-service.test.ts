@@ -1,10 +1,11 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppService } from '../electron/app-service.js';
 import { LibraryStore } from '../electron/library.js';
-import type { AIModel, OllamaState } from '../src/shared/types.js';
+import type { AIModel, OllamaState, CoachRequest } from '../src/shared/types.js';
 import { aiUnavailableReason } from '../src/shared/ai.js';
 import { pdfSource } from '../src/learning/pdf.js';
 const cleanup: (() => Promise<void> | void)[] = [];
@@ -14,7 +15,7 @@ async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'swallow-ollama-service-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   let calls = 0;
   const state: OllamaState = { status: 'ready', endpoint: { host: '127.0.0.1', port: 11434 }, revision: 1, models: [model], message: 'fixture' };
-  const ollama = { state, initialize: async () => {}, connect: async () => {}, refresh: async () => {}, disconnect: async () => { state.status = 'disconnected'; state.models = []; }, cancel() {}, dispose() {}, streamResponse: async () => { calls++; return { text: JSON.stringify({ overview: '로컬 설명', keyPoints: [{ title: '회상', explanation: '꺼내기', quote: '회상한다.' }], question: '무엇을 하나요?' }) }; } };
+  const ollama = { state, initialize: async () => {}, connect: async () => {}, refresh: async () => {}, disconnect: async () => { state.status = 'disconnected'; state.models = []; }, cancel() {}, dispose() {}, streamResponse: async (request: CoachRequest) => { const checked = qualityReply(request); if (checked) return checked; calls++; return { text: JSON.stringify({ overview: '로컬 설명', keyPoints: [{ title: '회상', explanation: '꺼내기', quote: '회상한다.' }], question: '무엇을 하나요?' }) }; } };
   const service = new AppService(new LibraryStore(join(root, 'library.json')), ollama);
   cleanup.push(() => service.dispose()); await service.initialize(); await service.refreshOllama();
   await service.addDocument({ title: '회상', source: '회상한다.', goal: '' });

@@ -20,6 +20,10 @@ async function fixture(handler?: (req: IncomingMessage, res: ServerResponse, bod
     calls.push({ path: req.url!, body });
     if (handler?.(req, res, body)) return;
     res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/chat' && body.format.properties?.verdict) {
+      res.end(JSON.stringify({ model: local.name, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ reason: 'Synthetic check', verdict: 'pass' }) } }));
+      return;
+    }
     if (req.url === '/api/version') res.end(JSON.stringify({ version: '0.12.0' }));
     else if (req.url === '/api/tags') res.end(JSON.stringify({ models: [local] }));
     else if (req.url === '/api/show') res.end(JSON.stringify(metadata));
@@ -53,7 +57,7 @@ describe('Ollama loopback 계약', () => {
     expect(body.stream).toBe(false); expect(body.format.additionalProperties).toBe(false);
     expect(body.messages.map((message: any) => message.role)).toEqual(['system', 'user']);
     expect(body).not.toHaveProperty('tools'); expect(body).not.toHaveProperty('images');
-    expect(calls.filter(call => call.path === '/api/show')).toHaveLength(1);
+    expect(calls.filter(call => call.path === '/api/show')).toHaveLength(2);
   });
   it.each([
     { ...metadata, remote_host: 'https://ollama.com' }, { ...metadata, remote_model: 'cloud' },
@@ -116,7 +120,7 @@ describe('Ollama loopback 계약', () => {
       if (req.url === '/api/version') { res.end('{"version":"0.24.0"}'); return true; }
       if (req.url === '/api/chat' && body.format.properties.assessment) {
         if (body.format.properties.assessment.maxLength > 2000) { res.writeHead(500); res.end('grammar repetition limit'); }
-        else res.end(JSON.stringify({ model: local.name, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ assessment: '원문과 맞습니다.', missingPoints: [], nextStep: '한 번 더 떠올리세요.' }) } }));
+        else res.end(JSON.stringify({ model: local.name, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ assessment: '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', missingPoints: ['회상한다.'], nextStep: '한 번 더 떠올리세요.' }) } }));
         return true;
       }
       return false;
@@ -126,7 +130,7 @@ describe('Ollama loopback 계약', () => {
     doc.recalls[doc.units[0]!.id] = { answer: '기억을 꺼냅니다.', savedAt: new Date().toISOString() };
     const coach = new StudyCoach(provider), model = provider.state.models[0]!.slug;
     await expect(coach.run('guide', doc, doc.units[0]!.id, () => {}, model)).resolves.toMatchObject({ overview: '회상 설명' });
-    await expect(coach.run('feedback', doc, doc.units[0]!.id, () => {}, model)).resolves.toMatchObject({ assessment: '원문과 맞습니다.' });
+    await expect(coach.run('feedback', doc, doc.units[0]!.id, () => {}, model)).resolves.toMatchObject({ assessment: '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.' });
     for (const call of calls.filter(call => call.path === '/api/chat')) expect(call.body).toMatchObject({ truncate: false, shift: false });
     const remote = await fixture((req, res) => {
       if (req.url === '/api/version') { res.end('{"version":"0.24.0"}'); return true; }

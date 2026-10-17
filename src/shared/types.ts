@@ -50,6 +50,7 @@ export interface RecallRecord {
   answer: string; savedAt: string; feedback?: RecallFeedback;
   rating?: Rating; reviewAt?: string;
 }
+/** Unreviewed translation draft; storage never certifies semantic accuracy. */
 export interface SourceTranslation {
   sourceText: string; text: string; targetLanguage: ResponseLanguage;
   model: string; identity: AIResultIdentity; createdAt: string;

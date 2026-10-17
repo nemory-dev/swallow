@@ -51,7 +51,7 @@ export function SourceTranslationPanel({ bridge, state, doc, unitId, disabled = 
     finally { cancelLock.current = false; if (live.current) setCancelPending(false); }
   }
   function comparison(translation: SourceTranslation) {
-    return <><div className="translation-comparison"><div><h4>{t('document.source')}</h4><p className="preserve-text" lang="">{translation.sourceText}</p></div><div><h4>{t('translation.resultLanguage', { language: t(targetLanguage === 'ko' ? 'language.ko' : 'language.en') })}</h4><p className="preserve-text" lang={translation.targetLanguage}>{translation.text}</p></div></div><p className="small-copy translation-metadata">{t('translation.savedWith', { model: state.models.find(model => model.slug === translation.model)?.displayName ?? translation.identity.upstreamModelId, date: formatDate(translation.createdAt) })}</p></>;
+    return <><p className="translation-review-status">{t('translation.reviewStatus')}</p><div className="translation-comparison"><div><h4>{t('document.source')}</h4><p className="preserve-text" lang="">{translation.sourceText}</p></div><div><h4>{t('translation.resultLanguage', { language: t(targetLanguage === 'ko' ? 'language.ko' : 'language.en') })}</h4><p className="preserve-text" lang={translation.targetLanguage}>{translation.text}</p></div></div><p className="small-copy translation-metadata">{t('translation.savedWith', { model: state.models.find(model => model.slug === translation.model)?.displayName ?? translation.identity.upstreamModelId, date: formatDate(translation.createdAt) })}</p></>;
   }
 
   return <section className="source-translation" aria-label={t('translation.title')}>

@@ -20,9 +20,12 @@ const server = createServer(async (req, res) => {
   else if (req.url === '/api/tags') res.end(JSON.stringify({ models: [{ name: 'ui-fixture:latest', model: 'ui-fixture:latest', digest: 'a'.repeat(64), size: 1024, details: { format: 'gguf', family: 'llama' } }] }));
   else if (req.url === '/api/show') res.end(JSON.stringify({ capabilities: ['completion'], details: { format: 'gguf' }, model_info: { 'general.architecture': 'llama', 'llama.context_length': 32768 } }));
   else if (req.url === '/api/chat') {
+    if (body.format.properties.verdict) {
+      res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ reason: 'Synthetic UI quality check', verdict: 'pass' }) } })); return;
+    }
     const payload = JSON.parse(body.messages[1].content);
     const content = payload.answer !== undefined
-      ? { assessment: '현재 질문의 답변을 확인했습니다.', missingPoints: [], nextStep: '원문과 대조하세요.' }
+      ? { assessment: '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', missingPoints: [payload.source.slice(0, 25)], nextStep: '원문과 대조하세요.' }
       : { overview: '시험 서버의 로컬 학습 설명입니다.', keyPoints: [{ title: '원문 근거', explanation: '자료에서 확인한 내용을 살펴보세요.', quote: payload.source.slice(0, 25) }], question: '어떤 내용을 배웠나요?' };
     res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(content) } }));
   } else { res.statusCode = 404; res.end('{}'); }
@@ -59,11 +62,14 @@ try {
   await page.getByRole('button', { name: '한 가지 질문에 답해보기 →', exact: true }).click();
   await page.getByRole('textbox', { name: '내 답변', exact: true }).fill('작은 부분부터 배웁니다.');
   await page.getByRole('button', { name: '답변 저장하고 피드백 받기', exact: true }).click();
-  await page.getByText('현재 질문의 답변을 확인했습니다.', { exact: true }).waitFor();
+  await page.getByText('정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', { exact: true }).waitFor();
   await page.getByRole('button', { name: '답변 저장하고 요점노트 보기', exact: true }).click();
   await page.getByRole('button', { name: '요점노트 저장', exact: true }).click();
   await page.waitForFunction(() => window.swallow.getState().then(async state => (await window.swallow.getStudyWorkspace(state.library.activeDocumentId)).notes.length === 1));
-  assert.equal(requests.filter(request => request.path === '/api/chat').length, 2);
+  const chats = requests.filter(request => request.path === '/api/chat');
+  assert.equal(chats.length, 3); // Guide generation + meaning check, feedback quote selection only.
+  assert.equal(chats.filter(request => request.body.format.properties.assessment).length, 1);
+  assert.equal(chats.filter(request => request.body.format.properties.verdict).length, 1);
   for (const { body } of requests.filter(request => request.path === '/api/chat')) { assert.equal(body.stream, false); assert.equal(body.format.additionalProperties, false); assert.equal(body.truncate, false); }
   await app.close(); app = undefined;
   page = await launch();

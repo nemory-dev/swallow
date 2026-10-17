@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ async function setup(sharing = true, lookupSource?: typeof import('../electron/d
   const requests: unknown[] = [];
   const client = localProvider();
   client.streamResponse = async (options: CoachRequest) => {
+      const checked = qualityReply(options); if (checked) return checked;
       requests.push(options.input);
       const payload = JSON.parse((options.input as { content: string }[])[1]!.content);
       return { text: JSON.stringify({ overview: '짧은 설명입니다.', keyPoints: [{ title: '핵심', explanation: '쉽게 이해하기', quote: payload.source.slice(0, 20) }], question: '무엇을 배웠나요?' }) };
@@ -29,6 +31,26 @@ async function setup(sharing = true, lookupSource?: typeof import('../electron/d
   return { service, client, store, id, requests };
 }
 describe('공부 시작 서비스', () => {
+  it('원문 대조가 거절한 안내는 DB에 저장하지 않고 원문과 위치를 보존한다', async () => {
+    const { service, client, id, store } = await setup();
+    await service.studySession({ type: 'start', documentId: id });
+    const before = store.exportLibrary(), session = service.getStudyWorkspace(id).session;
+    const respond = client.streamResponse;
+    client.streamResponse = async request => qualityReply(request) ? { text: JSON.stringify({ reason: '원문과 다름', verdict: 'fail' }) } : respond(request);
+    await expect(service.explainStudy(id, 'brief')).rejects.toThrow('저장하지');
+    expect(store.exportLibrary()).toEqual(before); expect(service.getStudyWorkspace(id).session).toEqual(session);
+    expect(service.getState().busy).toBeNull();
+  });
+  it('원문 대조 중 학습 위치를 바꾸면 늦은 pass도 저장하지 않는다', async () => {
+    const { service, client, id } = await setup(); await service.studySession({ type: 'start', documentId: id });
+    const respond = client.streamResponse; let finish: ((value: { text: string }) => void) | undefined;
+    client.streamResponse = request => qualityReply(request) ? new Promise(resolve => { finish = resolve; }) : respond(request);
+    const pending = service.explainStudy(id, 'brief'), rejected = expect(pending).rejects.toThrow('취소');
+    while (!finish) await new Promise(resolve => setTimeout(resolve, 1));
+    await service.studySession({ type: 'step', documentId: id, step: 'check' }); await rejected;
+    finish({ text: JSON.stringify({ reason: 'late', verdict: 'pass' }) }); await Promise.resolve();
+    expect(service.getStudyWorkspace(id).session?.guide).toBeUndefined(); expect(service.getState().busy).toBeNull();
+  });
   it('이전 지침으로 만든 설명은 다음 명시적 요청에서 갱신한다', async () => {
     const { service, store, id, requests } = await setup();
     await service.studySession({ type: 'start', documentId: id });
@@ -40,12 +62,12 @@ describe('공부 시작 서비스', () => {
   it('모름 재설명에는 실제 답변과 이전 질문을 보내며 같은 스타일 캐시를 재사용하지 않는다', async () => {
     const { service, id, requests } = await setup();
     await service.studySession({ type: 'start', documentId: id });
-    await service.explainStudy(id, 'simple');
+    const first = await service.explainStudy(id, 'simple');
     await service.studySession({ type: 'step', documentId: id, step: 'check' });
     await service.studySession({ type: 'relearn', documentId: id, answer: '아는 건 로드밸런싱뿐이야' });
     const result = await service.explainStudy(id, 'relearn');
     const payload = JSON.parse((requests[1] as { content: string }[])[1]!.content);
-    expect(payload.learner).toEqual({ question: '무엇을 배웠나요?', answer: '아는 건 로드밸런싱뿐이야' });
+    expect(payload.learner).toEqual({ question: first.session!.guide!.question, answer: '아는 건 로드밸런싱뿐이야' });
     expect(result.session?.step).toBe('explain'); expect(result.notes).toHaveLength(0);
     await service.studySession({ type: 'step', documentId: id, step: 'check' });
     await service.studySession({ type: 'relearn', documentId: id, answer: '' });

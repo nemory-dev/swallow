@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { describe, expect, it } from 'vitest';
 import { createDocument } from '../src/learning/document.js';
 import { pdfSource } from '../src/learning/pdf.js';
@@ -14,6 +15,7 @@ describe('그림과 페이지 근거를 포함한 학습', () => {
     const doc = document(); doc.pdf!.pages[1]!.note = '화살표 방향 확인';
     let pageRequested = 0;
     const coach = new StudyCoach({ streamResponse: async options => {
+      const checked = qualityReply(options); if (checked) return checked;
       const content = typeof options.input !== 'string' ? options.input[1]!.content : ''; 
       expect(content).toEqual(expect.arrayContaining([{ type: 'input_image', image_url: image, detail: 'high' }]));
       expect(JSON.stringify(content)).toContain('화살표 방향 확인');

@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { describe, expect, it } from 'vitest';
 import { createDocument, emptyLibrary, validateLibrary } from '../src/learning/document.js';
 import { createStudySession, applySessionAction, createStudyNote, validateStudyNote, validateStudySession, studyQuestion } from '../src/learning/session.js';
@@ -55,15 +56,15 @@ describe('AI 언어 snapshot·저장 계약', () => {
 });
 
 describe('공통 coach 한영 지침', () => {
-  it('영어 지침에서 원문/목표/인용/사용자 답안을 바꾸지 않는다', () => {
+  it('영어 지침에서 원문을 보존하고 제목·목표를 사실 근거로 보내지 않는다', () => {
     const messages = buildCoachInput('guide', doc, unit, undefined, undefined, { responseLanguage: 'en' });
     expect(messages[0]?.content).toContain('English');
     const payload = JSON.parse(messages[1]!.content as string);
-    expect(payload.source).toBe(unit.text); expect(payload.goal).toBe(doc.goal);
+    expect(payload.source).toBe(unit.text); expect(payload).not.toHaveProperty('goal'); expect(payload).not.toHaveProperty('title');
   });
   it('provider request에 UI locale와 별도로 responseLanguage를 전달한다', async () => {
     let captured: CoachRequest | undefined;
-    const coach = new StudyCoach({ streamResponse: async request => { captured = request; return { text: JSON.stringify(guide) }; } });
+    const coach = new StudyCoach({ streamResponse: async request => { const checked = qualityReply(request); if (checked) return checked; captured = request; return { text: JSON.stringify(guide) }; } });
     await coach.run('guide', doc, unit.id, () => {}, 'fixture', { responseLanguage: 'en' });
     expect(captured?.responseLanguage).toBe('en');
     expect(captured).not.toHaveProperty('uiLocale');

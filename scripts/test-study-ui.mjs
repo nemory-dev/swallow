@@ -52,6 +52,12 @@ async function usingApp(operation) {
 }
 const workspace = page => page.evaluate(id => window.swallow.getStudyWorkspace(id), documentId);
 const location = session => `${session.unitId}:${session.passageIndex}`;
+async function expandDetails(details) {
+  const summary = details.locator(':scope > summary');
+  await summary.focus();
+  if (await details.getAttribute('open') === null) await summary.press('Enter');
+  assert.notEqual(await details.getAttribute('open'), null);
+}
 
 await usingApp(async page => {
   await page.getByRole('heading', { name: '막막하면, 한 부분부터 같이 시작해요.', exact: true }).waitFor();
@@ -118,8 +124,8 @@ await usingApp(async page => {
   await page.getByRole('heading', { name: '한 부분을 공부하고 노트로 남겼어요.', exact: true }).waitFor();
   const saved = await workspace(page); assert.equal(saved.notes.length, 1); assert.equal(saved.session.step, 'done');
   assert.equal(saved.notes[0].userAnswer, draft); assert.equal(saved.notes[0].terms.length, 1); assert.equal(saved.notes[0].summaryOrigin, 'source');
-  await page.locator('.study-notes > summary').click();
-  await page.locator('.saved-note > summary').first().click();
+  await expandDetails(page.locator('.study-notes'));
+  await expandDetails(page.locator('.saved-note').first());
   const note = page.locator('.saved-note .note-contents').first();
   assert.match(await note.innerText(), /AI 없이 원문 발췌로 저장/);
   assert.match(await note.innerText(), /작업 기억/);
@@ -164,9 +170,9 @@ await usingApp(async page => {
   const saved = await workspace(page); assert.equal(saved.notes.length, 2);
   const aiNote = saved.notes.find(note => note.summaryOrigin === 'ai');
   assert.ok(aiNote); assert.equal(aiNote.guideModel, 'ui-synthetic-model'); assert.deepEqual(aiNote.evidenceQuotes, [syntheticQuote]);
-  await page.locator('.study-notes > summary').click();
+  await expandDetails(page.locator('.study-notes'));
   const savedNote = page.locator('.saved-note').filter({ hasText: '테스트 답변: 설명을 이해한 뒤 직접 떠올려 확인합니다.' });
-  await savedNote.locator(':scope > summary').click();
+  await expandDetails(savedNote);
   assert.match(await savedNote.innerText(), /설명 생성 모델 · ui-synthetic-model/);
   assert.match(await savedNote.innerText(), /테스트 질문: 이 작은 구간의 핵심은 무엇인가요/);
   await savedNote.getByText('AI 설명의 원문 근거', { exact: true }).click();

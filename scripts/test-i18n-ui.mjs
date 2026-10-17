@@ -22,10 +22,13 @@ const server = createServer(async (req, res) => {
   else if (req.url === '/api/tags') res.end(JSON.stringify({ models: [{ name: 'i18n-fixture', model: 'i18n-fixture', digest: 'a'.repeat(64), size: 1024, details: { format: 'gguf' } }] }));
   else if (req.url === '/api/show') res.end(JSON.stringify({ capabilities: ['completion'], details: { format: 'gguf' }, model_info: { 'general.architecture': 'llama', 'llama.context_length': 32768 } }));
   else if (req.url === '/api/chat') {
+    if (body.format.properties.verdict) {
+      res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ reason: 'Synthetic UI quality check', verdict: 'pass' }) } })); return;
+    }
     const payload = JSON.parse(body.messages[1].content);
-    const english = body.messages[0].content.includes('Write every explanation') || body.messages[0].content.includes('Write assessment');
+    const english = body.messages[0].content.includes('must be English');
     const content = payload.answer !== undefined
-      ? { assessment: english ? 'English feedback.' : '한국어 피드백.', missingPoints: [], nextStep: english ? 'Review it.' : '다시 확인하세요.' }
+      ? { assessment: english ? 'Correctness is not automatically graded. Compare the source evidence below with your answer.' : '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', missingPoints: [payload.source.slice(0, 20)], nextStep: english ? 'Review it.' : '다시 확인하세요.' }
       : { overview: english ? 'English fixture explanation.' : '한국어 시험 설명.', keyPoints: [{ title: english ? 'Source' : '원문', explanation: english ? 'An idea.' : '내용 확인.', quote: payload.source.slice(0, 20) }], question: english ? 'What did you learn?' : '무엇을 배웠나요?' };
     res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(content) } }));
   } else { res.statusCode = 404; res.end('{}'); }
@@ -102,7 +105,7 @@ try {
   assert.equal(chats().length, chatCount);
   await languageDialog.getByRole('button', { name: en('common.close'), exact: true }).click();
   await page.getByRole('button', { name: en('study.answerFeedback'), exact: true }).click();
-  await page.getByText('한국어 피드백.', { exact: true }).waitFor();
+  await page.getByText('정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', { exact: true }).waitFor();
   await page.getByRole('button', { name: en('study.saveAndNote'), exact: true }).click();
   await page.getByRole('button', { name: en('study.saveNote'), exact: true }).click();
   const note = (await page.evaluate(id => window.swallow.getStudyWorkspace(id), id)).notes[0];

@@ -1,3 +1,4 @@
+import { qualityReply } from './helpers/quality-review.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,13 +11,14 @@ import type { CoachRequest } from '../src/shared/types.js';
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 const source = '원문 인용 그대로. '.repeat(100);
-const guide = JSON.stringify({ overview: 'An explanation.', keyPoints: [{ title: 'Concept', explanation: 'An idea.', quote: '원문 인용 그대로.' }], question: 'What is the idea?' });
+const guide = JSON.stringify({ overview: '설명을 확인합니다.', keyPoints: [{ title: '개념', explanation: '원문에 근거한 설명.', quote: '원문 인용 그대로.' }], question: '무슨 뜻인가요?' });
+const englishGuide = JSON.stringify({ overview: 'An explanation.', keyPoints: [{ title: 'Concept', explanation: 'An idea.', quote: '원문 인용 그대로.' }], question: 'What is the idea?' });
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'swallow-i18n-service-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
   const store = new LibraryStore(join(root, 'library.json')); cleanups.push(() => store.close());
   const requests: CoachRequest[] = [];
   const client = localProvider('fixture');
-  client.streamResponse = async request => { requests.push(request); return { text: guide }; };
+  client.streamResponse = async request => { const checked = qualityReply(request); if (checked) return checked; requests.push(request); return { text: request.responseLanguage === 'en' ? englishGuide : guide }; };
   const service = new AppService(store, client); cleanups.push(() => service.dispose());
   await service.initialize(['ko']); await service.study({ type: 'select-model', model: 'fixture' }); await service.addDocument({ title: '원제목', source, goal: '원목표' });
   const id = service.getState().library.activeDocumentId!;
@@ -69,7 +71,7 @@ describe('서비스 언어/캐시/저장 통합', () => {
     await service.studySession({ type: 'start', documentId: id });
     let release!: () => void, started!: () => void;
     const start = new Promise<void>(resolve => { started = resolve; });
-    client.streamResponse = async () => { started(); await new Promise<void>(resolve => { release = resolve; }); return { text: guide }; };
+    client.streamResponse = async request => { const checked = qualityReply(request); if (checked) return checked; started(); await new Promise<void>(resolve => { release = resolve; }); return { text: guide }; };
     const pending = service.explainStudy(id, 'brief'); await start;
     await service.setLanguagePreferences({ uiLocale: 'en', responseLanguage: 'en' });
     release(); await pending;
@@ -82,7 +84,7 @@ describe('서비스 언어/캐시/저장 통합', () => {
     await service.studySession({ type: 'step', documentId: id, step: 'check' });
     await service.studySession({ type: 'answer', documentId: id, answer: '한국어 사용자 답변', unknown: false });
     let feedbackCalls = 0;
-    client.streamResponse = async () => { feedbackCalls++; return { text: JSON.stringify({ assessment: 'Good answer.', missingPoints: [], nextStep: 'Review it.' }) }; };
+    client.streamResponse = async request => { const checked = qualityReply(request); if (checked) return checked; feedbackCalls++; return { text: JSON.stringify({ assessment: 'Correctness is not automatically graded. Compare the source evidence below with your answer.', missingPoints: [source.slice(0, 100)], nextStep: 'Review it.' }) }; };
     await service.feedbackStudy(id); await service.feedbackStudy(id); expect(feedbackCalls).toBe(1);
     await service.studySession({ type: 'step', documentId: id, step: 'note' }); await service.saveStudyNote(id);
     const before = service.getStudyWorkspace(id);
@@ -114,7 +116,7 @@ describe('서비스 언어/캐시/저장 통합', () => {
     const { service, id, client } = await setup();
     await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '과거 회상 답안' });
     await service.setLanguagePreferences({ uiLocale: 'en', responseLanguage: 'en' });
-    client.streamResponse = async () => ({ text: JSON.stringify({ assessment: '검사', missingPoints: [], nextStep: '복습' }) });
+    client.streamResponse = async request => qualityReply(request) ?? ({ text: JSON.stringify({ assessment: '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', missingPoints: [source.slice(0, 100)], nextStep: '복습' }) });
     await service.generate('feedback', id, 'unit-0');
     expect(service.getState().library.documents[0]?.recalls['unit-0']?.feedback?.identity?.responseLanguage).toBe('ko');
   });

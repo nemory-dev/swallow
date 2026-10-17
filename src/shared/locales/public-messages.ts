@@ -1,5 +1,8 @@
 // Explicit safe text allowlist for existing main/provider status boundaries. Values contain no raw diagnostics.
 export const publicMessages = {
+  'public.aiQuality': ['AI 응답의 근거 또는 언어를 확인하지 못해 결과를 저장하지 않았습니다. 원문과 답변을 확인한 뒤 다시 요청하세요.', 'The AI response could not be verified against the source or output language and was not saved. Check the source and answer, then request again.'],
+  'public.translationNumbers': ['일반 문장에 숫자가 포함되어 번역을 중단했습니다. 현재 로컬 모델로 수치 관계의 정확성을 확인하지 못해 이 구간을 자동 번역하지 않습니다. 원문과 기존 기록은 유지됩니다.', 'Translation stopped because the prose contains numbers. Numeric relationships cannot be reliably verified with the current local models, so this unit is not automatically translated. The source and existing records are unchanged.'],
+  'public.translationIntegrity': ['번역에서 코드·URL·수식·숫자의 보존을 확인하지 못해 이 구간을 저장하지 않았습니다. 원문은 유지됩니다. 다시 요청하세요.', 'Code, URLs, math or numbers could not be preserved in the translation, so this unit was not saved. The source is unchanged. Request again.'],
   'public.folderMissing': ['폴더를 찾을 수 없습니다. 목록을 확인하고 다른 폴더를 선택한 뒤 다시 시도하세요.', 'The folder no longer exists. Check the list and choose another folder, then try again.'],
   'public.folderDuplicate': ['같은 이름의 폴더가 있습니다. 다른 이름을 입력하세요.', 'A folder with that name already exists. Enter a different name.'],
   'public.updateInstallingBusy': ['업데이트를 적용하는 중입니다. 잠시 기다려 주세요.', 'The app is applying the update. Please wait.'],

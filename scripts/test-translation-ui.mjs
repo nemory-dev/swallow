@@ -12,7 +12,7 @@ const modulePath = process.env.SWALLOW_PLAYWRIGHT_MODULE;
 let electron;
 try { ({ _electron: electron } = await import(modulePath ? pathToFileURL(modulePath).href : 'playwright')); }
 catch { throw new Error('UI 검증은 선택 도구 Playwright가 필요합니다. SWALLOW_PLAYWRIGHT_MODULE에 설치된 playwright/index.mjs 절대 경로를 지정하세요.'); }
-const [{ createTranslator }, { LibraryStore }, { createDocument }, { pdfSource }, { readingPassages }] = await Promise.all([
+const [{ createTranslator }, { LibraryStore }, { createDocument }, { pdfSource }] = await Promise.all([
   import('../dist-electron/src/shared/i18n.js'), import('../dist-electron/electron/library.js'),
   import('../dist-electron/src/learning/document.js'), import('../dist-electron/src/learning/pdf.js'),
   import('../dist-electron/src/learning/reading.js'),
@@ -29,7 +29,7 @@ async function waitUntil(check, description, timeout = 15000) {
   throw new Error(`Timed out: ${description}`);
 }
 const translationChats = () => requests.filter(request => request.path === '/api/chat' && request.payload?.targetLanguage);
-const translationText = (text, language) => readingPassages(text).map(part => part.trim() ? `[${language}] ${part}` : part).join('');
+const assertTranslation = (text, language) => assert.ok(text.includes(language === 'ko' ? '[ko] 한국어번역을검증하는합성결과입니다' : '[en]'));
 let activeTranslations = 0, maximumActiveTranslations = 0, heldResponse;
 let holdNextTranslation = false;
 const timers = new Set();
@@ -43,6 +43,9 @@ const server = createServer(async (req, res) => {
     if (req.url === '/api/tags') return res.end(JSON.stringify({ models: [{ name: 'translation-fixture:latest', model: 'translation-fixture:latest', digest: 'b'.repeat(64), size: 1024, details: { format: 'gguf', family: 'llama' } }] }));
     if (req.url === '/api/show') return res.end(JSON.stringify({ capabilities: ['completion'], details: { format: 'gguf' }, model_info: { 'general.architecture': 'llama', 'llama.context_length': 32768 } }));
     if (req.url !== '/api/chat') { res.statusCode = 404; return res.end('{}'); }
+    if (body.format.properties.verdict) {
+      res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ reason: 'Synthetic UI quality check', verdict: 'pass' }) } })); return;
+    }
     const payload = JSON.parse(body.messages.find(message => message.role === 'user').content);
     record.payload = payload;
     let content;
@@ -60,7 +63,7 @@ const server = createServer(async (req, res) => {
       let released = false;
       const complete = () => { if (!released) { released = true; activeTranslations--; } };
       res.once('finish', complete); res.once('close', complete);
-      content = { translation: `[${payload.targetLanguage}] ${payload.source}` };
+      content = { translation: `${payload.targetLanguage === 'ko' ? '[ko] ' + '한국어번역을검증하는합성결과입니다'.repeat(4) : '[en]'} ${payload.source}` };
       if (holdNextTranslation) {
         holdNextTranslation = false;
         await new Promise(resolve => { heldResponse = { release: resolve, attempted: false }; });
@@ -68,7 +71,7 @@ const server = createServer(async (req, res) => {
       } else await new Promise(resolve => {
         const timer = setTimeout(() => { timers.delete(timer); resolve(); }, 70); timers.add(timer);
       });
-    } else if (payload.answer !== undefined) content = { assessment: '합성 피드백입니다.', missingPoints: [], nextStep: '원문을 확인하세요.' };
+    } else if (payload.answer !== undefined) content = { assessment: '정오를 자동 판정하지 않습니다. 아래 원문 근거를 자신의 답변과 비교하세요.', missingPoints: [payload.source.slice(0, 20)], nextStep: '원문을 확인하세요.' };
     else content = { overview: '합성 학습 설명입니다.', keyPoints: [{ title: '원문', explanation: '합성 내용 확인.', quote: payload.source.slice(0, 20) }], question: '무엇을 배웠나요?' };
     res.end(JSON.stringify({ model: body.model, done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(content) } }));
   } catch (error) {
@@ -153,7 +156,9 @@ try {
   await panel().getByRole('button', { name: ko('translation.current'), exact: true }).click();
   await waitTranslation(id, firstUnit.id, 'ko');
   const korean = (await document(id)).translations[firstUnit.id].ko;
-  assert.equal(korean.text, translationText(firstUnit.text, 'ko'));
+  assertTranslation(korean.text, 'ko');
+  assert.equal(await panel().locator('.translation-current .translation-review-status').innerText(), ko('translation.reviewStatus'));
+  assert.ok(korean.text.includes('`sum = a + b`')); assert.ok(korean.text.includes('E = mc²'));
   assert.equal(korean.sourceText, firstUnit.text); assert.equal(korean.targetLanguage, 'ko');
   assert.equal(korean.identity.responseLanguage, 'ko');
   assert.equal(await panel().locator('.translation-current .translation-comparison p').first().textContent(), firstUnit.text);
@@ -164,7 +169,7 @@ try {
   await panel().getByRole('button', { name: ko('translation.current'), exact: true }).click();
   await waitTranslation(id, firstUnit.id, 'en');
   const both = (await document(id)).translations[firstUnit.id];
-  assert.deepEqual(both.ko, korean); assert.equal(both.en.text, translationText(firstUnit.text, 'en'));
+  assert.deepEqual(both.ko, korean); assertTranslation(both.en.text, 'en');
   assert.equal((await state()).language.preferences.responseLanguage, 'en');
   await panel().getByRole('combobox', { name: ko('translation.targetLanguage'), exact: true }).selectOption('ko');
   const countBeforeWhole = translationChats().length;
@@ -181,9 +186,10 @@ try {
     return !current.busy && doc.units.every(unit => !!doc.translations?.[unit.id]?.ko);
   }, 'whole-document translations');
   const whole = await document(id);
-  for (const unit of whole.units) assert.equal(whole.translations[unit.id].ko.text, translationText(unit.text, 'ko'));
-  const expectedWholeRequests = original.units.slice(1).reduce((sum, unit) => sum + readingPassages(unit.text).filter(part => part.trim()).length, 0);
-  assert.equal(translationChats().length - countBeforeWhole, expectedWholeRequests, 'cached first unit must not be translated again');
+  for (const unit of whole.units) assertTranslation(whole.translations[unit.id].ko.text, 'ko');
+  assert.deepEqual(whole.translations[firstUnit.id].ko, korean);
+  assert.ok(translationChats().length > countBeforeWhole, 'uncached units must be translated');
+  assert.equal(translationChats().slice(countBeforeWhole).some(request => request.payload.source.includes('# Synthetic translation source')), false, 'cached first unit must not be translated again');
   const progress = await page.evaluate(() => { window.stopTranslationProgress(); return window.translationProgress; });
   assert.ok(progress.some(value => value.progress.completed === 1 && value.progress.total === original.units.length));
   assert.ok(progress.some(value => value.progress.completed === original.units.length));
@@ -253,12 +259,15 @@ try {
   await panel().locator('.translation-saved > summary').click();
   assert.equal(await panel().locator('.translation-saved-unit').count(), original.units.length);
   await panel().locator('.translation-saved-unit > summary').first().click();
+  assert.equal(await panel().locator('.translation-current .translation-review-status').innerText(), en('translation.reviewStatus'));
+  assert.equal(await panel().locator('.translation-saved-unit .translation-review-status').first().innerText(), en('translation.reviewStatus'));
+  assert.equal(requests.filter(request => request.body?.format?.properties?.verdict).length, 0, 'draft generation must not ask for semantic approval');
   assert.equal(await page.locator('.study-answer').inputValue(), '번역 중에도 유지할 사용자 답변 초안');
   assert.equal(translationChats().length, beforeRestartCount, 'saved translations must be readable while disconnected');
   await panel().locator('h3').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(artifacts, 'translation-ui.png') });
   assert.deepEqual(fixtureErrors, []); assert.deepEqual(errors, []);
-  console.log('Translation Electron UI passed: ko/en independent storage, source/draft/locale preservation, sequential whole-document progress/cache, cancelled late response, PDF text/OCR/empty-page handling, disconnected restart reading. No real AI/account calls.');
+  console.log('Translation Electron UI passed: ko/en independent storage, source/draft/locale preservation, sequential whole-document progress/cache, cancelled late response, PDF text/OCR/empty-page handling, disconnected restart reading, current/saved bilingual unreviewed draft labels and no semantic approval calls. No real AI/account calls.');
   console.log('Screenshot: ' + join(artifacts, 'translation-ui.png'));
   console.log('Synthetic data directory: ' + data);
 } catch (error) {
