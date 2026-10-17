@@ -6,7 +6,7 @@
   "description": "원문 읽기부터 회상과 복습까지 이끄는 개인 학습 앱",
   "main": "dist-electron/electron/main.js",
   "engines": {
-    "node": ">=22.12.0"
+    "node": "24.x"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",

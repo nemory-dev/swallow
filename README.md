@@ -2,27 +2,72 @@
 
 원문을 작은 부분부터 읽고, 내 답변과 요점노트를 남기는 개인 학습용 macOS 데스크톱 앱입니다. 텍스트·Markdown·공개 문서 링크·PDF를 가져와 읽고, 로컬 음성으로 듣고, 회상·복습 기록을 저장할 수 있습니다.
 
-자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따릅니다. 모든 기능은 무료이며 기능 유료 전환을 하지 않습니다. 후원은 나중에 별도로 도입합니다. 현재는 **소스 공개 준비 단계**이며 설치본·스토어 배포·자동 업데이트 feed를 제공하지 않습니다.
+자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따릅니다. 모든 기능은 무료이며 기능 유료 전환을 하지 않습니다. 후원은 나중에 별도로 도입합니다. 현재는 **공개 개발 미리보기**이며 다운로드용 설치본·스토어 배포·자동 업데이트 feed를 제공하지 않습니다. GitHub의 **Code → Download ZIP**은 소스 파일이며 설치 프로그램이 아닙니다.
 
-## 개발 실행
+## 처음 실행하기
 
-macOS Apple Silicon, Node.js 24 LTS와 npm을 권장합니다. manifest 요구는 Node `>=22.12.0`이며 의존성은 `package-lock.json`으로 고정합니다. PDF helper 빌드에는 Xcode Command Line Tools가 필요합니다. 설치된 도구를 확인하고 필요한 경우 직접 준비하세요.
+지원하는 개발용 Node 버전은 **24 LTS (`24.x`)**이며 `.nvmrc`도 24를 지정합니다. Node 22·25·26은 지원 범위에 포함하지 않습니다. 의존성은 `package-lock.json`으로 고정합니다. 확인한 개발 환경은 **macOS 15.6.1 / Apple Silicon**이며 다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다.
 
-저장소 루트에서:
+먼저 필요한 도구를 준비하세요.
+
+1. [Node.js 공식 다운로드](https://nodejs.org/en/download)에서 **24 LTS / macOS arm64**와 npm을 설치합니다. 이미 nvm을 사용한다면 저장소를 받은 뒤 `nvm install`과 `nvm use`로 `.nvmrc`의 버전을 선택할 수 있습니다.
+2. Git과 PDF helper 빌드에 필요한 Xcode Command Line Tools를 준비합니다. 개발 도구가 없다면 `xcode-select --install`을 실행하고 설치 완료를 기다리세요. 이미 Xcode가 설치됐다면 기존 도구를 사용합니다. 검증 기기는 Xcode 전체 설치 환경이며 Command Line Tools만 설치한 환경은 아직 별도로 확인하지 않았습니다.
+3. 터미널을 다시 열어 도구와 버전을 확인합니다.
 
 ```sh
-npm ci
-npm run dev
+git --version
+node --version          # v24.x
+npm --version
+node -p "process.arch"  # arm64
+xcode-select -p
+xcrun --find swiftc
 ```
 
-`npm ci`는 네트워크로 패키지와 Electron 바이너리를 내려받습니다. `npm run dev`는 빌드 후 데스크톱 앱과 `127.0.0.1:5173` 개발 서버를 엽니다. renderer 변경은 자동 반영되며 `electron/`, `src/shared/`, `src/learning/` 변경은 앱 재시작이 필요합니다.
+새 작업 폴더에서 소스를 받아 실행합니다. 이미 저장소를 받았다면 해당 폴더로 이동해 `npm ci`부터 실행하세요.
 
 ```sh
-npm start          # 빌드 후 데스크톱 실행
+git clone https://github.com/nemory-dev/swallow.git
+cd swallow
+npm ci
+npm start
+```
+
+`npm ci`는 네트워크로 패키지를 받습니다. 고정된 Electron 44는 **첫 실행 때 바이너리를 별도로 내려받을 수 있어** 최초 실행에도 네트워크가 필요합니다. 미리 다운로드하려면 `npm ci` 뒤에 `npx install-electron --no`를 실행하세요. [Electron 공식 설치 안내](https://www.electronjs.org/docs/latest/tutorial/installation)
+
+`npm start`는 PDF helper와 앱을 빌드한 뒤 개발 서버 없이 데스크톱 앱을 엽니다. 앱 창이 나타나면 다음 순서로 첫 학습을 확인하세요. 로그인이나 Ollama 설치는 필요하지 않습니다.
+
+1. **짧은 예제 문서로 시작하기 → 공부 시작**을 선택합니다.
+2. **이번 부분 원문 보기**를 펼쳐 원문을 읽고 **한 가지 질문에 답해보기 →**를 선택합니다.
+3. 내 답변을 적고 **답변 저장하고 요점노트 보기 → 요점노트 저장**을 선택합니다.
+4. **한 부분을 공부하고 노트로 남겼어요.**, **저장한 요점노트 · 1개**가 보이면 성공입니다.
+5. `⌘Q`로 앱을 완전히 종료하고 `npm start`로 다시 열어 문서·답변·요점노트가 남아 있는지 확인합니다.
+
+로컬 AI 연결은 첫 학습 이후에 선택할 수 있습니다. [로컬 AI 안내](#로컬-ai)를 참고하세요.
+
+## 개발과 브라우저 미리보기
+
+```sh
+npm run dev       # 빌드 후 데스크톱 앱 + 개발 서버
 npm run preview   # 브라우저 미리보기
 ```
 
-브라우저 미리보기는 별도 사이트 저장소에서 읽기·답변·노트·공개 링크·로컬 음성을 제공합니다. AI와 PDF 가져오기는 데스크톱 기능입니다. `npm run build`는 개발용 출력을 생성하며 설치본을 만들지 않습니다.
+두 명령은 각각 `127.0.0.1:5173` 개발 서버를 사용하므로 함께 실행하지 마세요. `npm run dev`에서는 renderer 변경이 자동 반영되며 `electron/`, `src/shared/`, `src/learning/` 변경은 앱 재시작이 필요합니다. 개발 서버만 실행 중이라면 해당 터미널에서 `Ctrl+C`로 종료합니다.
+
+브라우저 미리보기는 별도 브라우저 저장소에서 읽기·답변·노트·공개 링크·로컬 음성을 제공합니다. 데스크톱에 저장한 기록과 공유하지 않으며, AI 생성과 PDF 가져오기는 데스크톱 기능입니다. `npm run build`는 개발용 출력을 생성하며 설치본을 만들지 않습니다.
+
+## 실행이 막힐 때
+
+| 증상 | 확인과 복구 |
+| --- | --- |
+| `node`·`npm`을 찾지 못하거나 Node 버전이 다름 | Node 24 LTS 설치/선택 후 터미널을 다시 열고 `node --version`을 확인하세요. `npm ci`가 경고만 표시해도 지원 범위 밖의 Node로 계속 진행하지 마세요. |
+| `No such built-in module: node:sqlite` | 먼저 Node 24인지 확인한 뒤 `npm run check`를 다시 실행하세요. Node 22용 실험 플래그는 현재 지원 절차가 아닙니다. |
+| `xcrun` 또는 PDF helper 빌드 실패 | `xcode-select -p`, `xcrun --find swiftc`를 확인하세요. 도구 설치가 끝난 뒤 `npm run build`를 다시 실행합니다. |
+| `Downloading Electron binary...`에서 오래 기다림 | 최초 다운로드일 수 있습니다. 네트워크와 GitHub 다운로드 접근을 확인한 뒤 다시 실행하거나 `npx install-electron --no`로 다운로드 단계를 따로 실행하세요. |
+| 개발 서버가 열리지 않음 | 같은 프로젝트의 `dev`·`preview` 중복 실행을 확인하고 해당 터미널에서 `Ctrl+C`로 종료하세요. 첫 체험에는 `npm start`를 사용할 수 있습니다. |
+| Playwright 모듈을 찾지 못함 | 앱 실행에는 필요 없는 UI 검증 도구입니다. [기여 안내의 UI 검증 준비](CONTRIBUTING.md#ui-검증-준비)를 참고하세요. |
+| AI 연결 또는 앱 업데이트가 준비되지 않았다고 표시됨 | AI 없는 학습은 계속 사용할 수 있습니다. 로컬 AI는 사용자가 별도 준비하며, 현재 자동 업데이트 feed는 제공하지 않습니다. |
+
+실행 문제를 문의할 때는 Node/npm 버전, macOS/CPU, 재현 순서와 개인정보를 지운 오류를 알려 주세요. 사용자 DB·PDF·학습 원문·토큰을 첨부하지 마세요.
 
 ## 학습 흐름
 
@@ -85,7 +130,7 @@ npm run source:prepare
 
 `source:check`는 working tree의 명시적 소스 목록에서 구독 의존성·금지 파일·symlink·제한된 민감 패턴과 공개 문서 링크를 확인합니다. `source:prepare`는 통과한 파일만 `artifacts/public-source/`의 새 폴더에 복사하고 파일별 SHA-256 manifest를 만듭니다. Git 이력·node_modules·사용자 DB·인증·내부 계획·설치본은 복사하지 않으며 commit/push/업로드도 하지 않습니다. 테스트/빌드와 최종 사용자 검토는 별도이며, 패턴 검사가 모든 비밀을 증명하는 것은 아닙니다.
 
-Electron UI 검증 스크립트는 선택 도구 Playwright를 사용합니다. 이미 설치된 모듈의 절대 경로를 `SWALLOW_PLAYWRIGHT_MODULE`로 지정할 수 있습니다. 합성 localhost 서버/임시 저장소 시험과 실제 모델·설치본 검증은 구분합니다.
+Electron UI 검증 스크립트는 선택 도구 Playwright를 사용합니다. [별도 도구 폴더에 준비하는 방법](CONTRIBUTING.md#ui-검증-준비)을 참고하거나, 이미 설치된 모듈의 절대 경로를 `SWALLOW_PLAYWRIGHT_MODULE`로 지정하세요. 합성 localhost 서버/임시 저장소 시험과 실제 모델·설치본 검증은 구분합니다.
 
 빌드 후 기존 Playwright로 UI 전체 회귀를 실행하려면:
 
