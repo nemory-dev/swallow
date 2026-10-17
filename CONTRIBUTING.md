@@ -6,7 +6,7 @@ Swallow의 자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따�
 
 지원하는 개발용 Node 버전은 **24 LTS (`24.x`)**입니다. `package.json`·lockfile의 프로젝트 선언과 `.nvmrc`를 함께 맞춥니다. Node 22·25·26은 지원 범위가 아니며, npm이 경고만 출력하더라도 Node 24로 전환한 뒤 작업하세요. 의존성 자체의 `engines` 범위는 해당 패키지의 선언이므로 일괄 수정하지 않습니다.
 
-앱과 PDF helper의 최소 대상은 macOS 15.0 / Apple Silicon (arm64)이며, 실제 확인한 환경은 macOS 15.6.1 / Apple Silicon입니다. macOS 15.0 기기·다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다. Git과 PDF helper 빌드를 위한 Xcode Command Line Tools가 필요합니다. 도구가 없다면 [README의 준비 절차](README.md#처음-실행하기)를 따르세요. 현재 검증 기기는 Xcode 전체 설치 환경이며 Command Line Tools만 설치한 환경은 별도 확인이 필요합니다.
+앱과 PDF helper의 최소 대상은 macOS 15.0 / Apple Silicon (arm64)이며, 실제 확인한 환경은 macOS 15.6.1 / Apple Silicon입니다. macOS 15.0 기기·다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다. Git과 PDF helper 빌드를 위한 Xcode Command Line Tools가 필요합니다. 도구가 없다면 [README의 준비 절차](README.md#소스로-실행하기--개발자용)를 따르세요. 현재 검증 기기는 Xcode 전체 설치 환경이며 Command Line Tools만 설치한 환경은 별도 확인이 필요합니다.
 
 새 작업 폴더에서:
 
@@ -24,7 +24,7 @@ npm run dev
 
 `npm ci`는 패키지를 받고, Electron 44 바이너리는 첫 실행 때 별도로 다운로드될 수 있습니다. 미리 받으려면 `npx install-electron --no`를 실행하세요. `npm run dev`는 빌드 후 앱과 `127.0.0.1:5173` 개발 서버를 엽니다. renderer 변경은 자동 반영되며 `electron/`, `src/shared/`, `src/learning/` 변경은 앱 재시작이 필요합니다. 앱을 `⌘Q`로 종료하거나 개발 서버 터미널에서 `Ctrl+C`로 종료할 수 있습니다.
 
-처음 앱을 체험할 때는 `npm start`로 개발 서버 없이 실행하고 [README의 첫 학습 절차](README.md#처음-실행하기)를 확인하세요. `npm run preview`는 별도 브라우저 저장소의 미리보기이며 데스크톱 기록·AI 생성·PDF 가져오기를 제공하지 않습니다. `dev`·`preview`는 같은 기본 포트를 사용하므로 동시에 실행하지 않습니다. `npm run build`는 개발 출력만 생성하며 설치본을 만들지 않습니다. 실행·검증에 실제 AI 계정·토큰·로컬 모델을 제공할 필요는 없습니다.
+처음 앱을 체험할 때는 `npm start`로 개발 서버 없이 실행하고 [README의 첫 학습 절차](README.md#첫-학습-확인)를 확인하세요. `npm run preview`는 별도 브라우저 저장소의 미리보기이며 데스크톱 기록·AI 생성·PDF 가져오기를 제공하지 않습니다. `dev`·`preview`는 같은 기본 포트를 사용하므로 동시에 실행하지 않습니다. `npm run build`는 개발 출력만 생성하며 설치본을 만들지 않습니다. 실행·검증에 실제 AI 계정·토큰·로컬 모델을 제공할 필요는 없습니다.
 
 공개 소스는 로컬 AI와 AI 없는 학습을 대상으로 합니다. 구독 SDK·로그인·브랜드는 포함하지 않으며 새 제공자를 도입할 때는 사용/재배포 조건과 데이터 흐름을 먼저 검토합니다.
 
@@ -75,7 +75,9 @@ npm run make:mac:arm64
 
 출력은 실행마다 `artifacts/macos/` 아래 새 폴더에 생성합니다. staging에는 renderer·Electron 빌드 결과, 잠긴 운영 의존성과 라이선스만 복사합니다. 원본 소스·테스트·내부 보고서·Git 이력·사용자 DB/PDF·개발 도구를 넣지 않습니다. Swift PDF helper는 ASAR 안에서 직접 실행할 수 없으므로 `Contents/Resources/native/swallow-pdf`에 두고, 패키지 실행 시 `process.resourcesPath`에서 찾습니다. 개발 실행은 기존 `dist-electron/native/swallow-pdf`를 사용합니다. 패키지에서는 `SWALLOW_DEV_URL`을 무시하고 내장 화면을 엽니다.
 
-앱과 helper의 최소 대상은 macOS 15.0으로 맞춥니다. 이는 실제 macOS 15.0 기기 검증을 대신하지 않습니다. 패키징 도구의 서명·공증 옵션과 프레임워크 재서명을 사용하지 않으며 GitHub 업로드·릴리스·업데이트 feed 생성도 하지 않습니다. Electron과 컴파일된 실행 파일에 원래 포함된 서명 정보는 배포용 서명이 아닙니다. 공식 배포에는 별도 서명·공증 계획과 검증이 필요합니다.
+앱과 helper의 최소 대상은 macOS 15.0으로 맞춥니다. 이는 실제 macOS 15.0 기기 검증을 대신하지 않습니다. 최종 패키지는 인증서 없는 로컬 **ad-hoc 서명**으로 내부 코드와 리소스를 봉인합니다. 이는 기술적으로 서명이지만 Developer ID 서명·Apple 공증·개발자 신원 확인은 아닙니다. Keychain 인증서 자동 검색·프로비저닝 프로필·Apple 타임스탬프·공증을 사용하지 않고, 추가 entitlements도 부여하지 않습니다. 서명 또는 `codesign --verify --deep --strict`가 실패하면 DMG 생성을 중단합니다. 기존 명령이 만드는 `unsigned` 파일명은 Developer ID 미서명·미공증 후보를 뜻합니다.
+
+패키징 명령 자체는 GitHub 업로드·릴리스·업데이트 feed 생성을 하지 않습니다. 리소스 무결성 검사와 Gatekeeper의 개발자 신뢰 정책은 별개이므로 ad-hoc 후보의 `spctl` 거절을 공증 통과로 표현하지 마세요. [README의 설치·보안 안내](README.md#dmg로-설치하기--릴리스-공개-후)와 실제 다운로드 사본의 앱별 허용·첫 실행·재실행을 별도로 확인하고, 실제 릴리스 공개는 최종 확인 뒤에 진행합니다.
 
 기존 UI 7종에 더해 **생성된 실제 앱**을 검증하려면 Playwright를 위 절차로 준비하고 출력된 경로를 지정하세요.
 

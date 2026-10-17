@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { packager } from '@electron/packager';
 import { listPackage } from '@electron/asar';
 import { assertMacHost, stageMacApp } from './macos-package.mjs';
+import { verifyMacBundle } from './macos-signing.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 function run(command, args, env = process.env) {
@@ -43,12 +44,18 @@ async function main() {
       appBundleId: 'io.github.nemory-dev.swallow', appVersion: staged.version,
       asar: true, prune: false, extraResource: [native, licenses],
       extendInfo: { LSMinimumSystemVersion: '15.0' }, extendHelperInfo: { LSMinimumSystemVersion: '15.0' },
-      // Packager 20 otherwise patches Electron Framework and invokes codesign --sign -.
       asarIntegrityDigest: false,
+      // Seal nested code and resources locally without certificates, profiles or Apple services.
+      osxSign: {
+        identity: '-', identityValidation: false, continueOnError: false,
+        preAutoEntitlements: false, preEmbedProvisioningProfile: false,
+        optionsForFile: () => ({ entitlements: [], hardenedRuntime: false, timestamp: 'none' }),
+      },
       ...(process.env.electron_config_cache ? { download: { cacheRoot: process.env.electron_config_cache } } : {}),
     });
     if (!appDirectory) throw new Error('Electron Packager did not produce an app.');
     const app = join(appDirectory, 'Swallow.app');
+    verifyMacBundle(app);
     const archive = join(app, 'Contents/Resources/app.asar');
     const files = listPackage(archive);
     for (const expected of ['/package.json', '/dist/index.html', '/dist-electron/electron/main.js', '/dist-electron/electron/preload.cjs']) {
@@ -66,7 +73,8 @@ async function main() {
     }
     const manifest = {
       version: staged.version, platform: 'darwin', arch: 'arm64', minimumMacOS: '15.0', node: process.versions.node, electron: electronVersion,
-      signing: 'No signing or notarization performed; upstream Electron binaries retain their existing signatures.',
+      signing: 'Local ad-hoc resource integrity signature only; no Developer ID certificate or Apple notarization.',
+      adHocSigning: true, developerIDSigning: false, appleNotarization: false, bundleIntegrity: 'verified',
       app, ...(dmg ? { dmg, dmgSha256: createHash('sha256').update(await readFile(dmg)).digest('hex') } : {}),
       archiveFiles: files.length, dependencies: staged.dependencies,
     };
