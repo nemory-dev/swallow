@@ -6,7 +6,7 @@
 
 ## 처음 실행하기
 
-지원하는 개발용 Node 버전은 **24 LTS (`24.x`)**이며 `.nvmrc`도 24를 지정합니다. Node 22·25·26은 지원 범위에 포함하지 않습니다. 의존성은 `package-lock.json`으로 고정합니다. 확인한 개발 환경은 **macOS 15.6.1 / Apple Silicon**이며 다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다.
+지원하는 개발용 Node 버전은 **24 LTS (`24.x`)**이며 `.nvmrc`도 24를 지정합니다. Node 22·25·26은 지원 범위에 포함하지 않습니다. 의존성은 `package-lock.json`으로 고정합니다. 앱과 PDF helper의 최소 대상은 **macOS 15.0 / Apple Silicon (arm64)**입니다. 실제 확인한 환경은 **macOS 15.6.1 / Apple Silicon**이며 macOS 15.0 기기·다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다.
 
 먼저 필요한 도구를 준비하세요.
 
@@ -54,6 +54,21 @@ npm run preview   # 브라우저 미리보기
 두 명령은 각각 `127.0.0.1:5173` 개발 서버를 사용하므로 함께 실행하지 마세요. `npm run dev`에서는 renderer 변경이 자동 반영되며 `electron/`, `src/shared/`, `src/learning/` 변경은 앱 재시작이 필요합니다. 개발 서버만 실행 중이라면 해당 터미널에서 `Ctrl+C`로 종료합니다.
 
 브라우저 미리보기는 별도 브라우저 저장소에서 읽기·답변·노트·공개 링크·로컬 음성을 제공합니다. 데스크톱에 저장한 기록과 공유하지 않으며, AI 생성과 PDF 가져오기는 데스크톱 기능입니다. `npm run build`는 개발용 출력을 생성하며 설치본을 만들지 않습니다.
+
+## macOS Apple Silicon용 로컬 패키지 만들기
+
+위 개발 도구와 `npm ci`를 준비한 **macOS 15 이상 / Apple Silicon / Node 24**에서 실행합니다.
+
+```sh
+npm run package:mac:arm64  # 빌드 후 Swallow.app 생성
+npm run make:mac:arm64     # 빌드 후 Swallow.app + DMG 생성
+```
+
+각 명령은 `artifacts/macos/` 아래 새 출력 폴더를 만들고 완료 시 정확한 경로를 출력합니다. 두 명령 모두 빌드를 포함하므로 DMG까지 필요하면 두 번째 명령만 실행하세요. 최초 패키징은 Electron 바이너리를 내려받기 위해 네트워크가 필요할 수 있습니다.
+
+생성한 `Swallow.app`을 별도 폴더로 복사해 실행하거나, 로컬 DMG를 열어 `Swallow.app`을 `Applications`로 옮길 수 있습니다. 완성된 앱에는 Electron과 PDF helper가 들어 있으므로 실행할 때 소스 폴더·Node·npm·Xcode·개발 서버가 필요하지 않습니다. Ollama는 AI를 선택적으로 사용할 때만 별도로 준비합니다. 앱을 옮겨도 학습 기록은 [기본 저장 위치](#저장백업삭제)에 남습니다. 개발 앱과 같은 저장 위치를 사용하므로 두 앱을 동시에 열지 말고, 별도 시험에는 절대 경로의 `SWALLOW_DATA_DIR`를 사용하세요.
+
+현재 산출물은 **서명·공증하지 않은 로컬 검증용**입니다. GitHub 다운로드·릴리스·자동 업데이트 feed를 게시하지 않습니다. 다른 컴퓨터나 다운로드한 사본에서는 macOS가 실행을 막을 수 있으며, 일반 사용자 배포 전에는 서명·공증과 별도 설치 검증이 필요합니다. 패키징 절차와 검증 명령은 [기여 안내](CONTRIBUTING.md#macos-패키징-검증)를 참고하세요.
 
 ## 실행이 막힐 때
 

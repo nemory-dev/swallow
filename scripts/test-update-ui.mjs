@@ -22,6 +22,7 @@ const bootstrap = join(bootstrapRoot, 'main.cjs');
 await writeFile(bootstrap, `
 const { app, autoUpdater } = require('electron');
 Object.defineProperty(app, 'isPackaged', { value: true });
+Object.defineProperty(process, 'resourcesPath', { value: ${JSON.stringify(join(root, 'dist-electron'))} });
 app.getAppPath = () => ${JSON.stringify(bootstrapRoot)};
 app.getVersion = () => '0.1.0';
 const harness = { native: autoUpdater, checks: 0, installs: 0 };

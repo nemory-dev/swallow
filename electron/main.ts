@@ -13,6 +13,7 @@ import { translate, type AppLanguage } from '../src/shared/i18n.js';
 import { OllamaProvider } from './ollama.js';
 import { NativeSpeech, installedVoices } from './speech.js';
 import { PdfStore } from './pdf.js';
+import { runtimePaths } from './runtime.js';
 import { fetchDocumentUrl } from './document-url.js';
 import { getDocument, getUnit } from '../src/learning/document.js';
 import { studyPassage } from '../src/learning/session.js';
@@ -27,9 +28,9 @@ if (override) {
 }
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const distDirectory = resolve(currentDirectory, '../../dist');
-const devUrl = process.env.SWALLOW_DEV_URL;
-if (devUrl && devUrl !== 'http://127.0.0.1:5173') throw new Error('허용하지 않는 개발 서버 주소입니다.');
-const homeUrl = devUrl ?? 'swallow://app/';
+const { devUrl, homeUrl, pdfHelper } = runtimePaths({
+  packaged: app.isPackaged, resourcesPath: process.resourcesPath, currentDirectory, devUrl: process.env.SWALLOW_DEV_URL,
+});
 protocol.registerSchemesAsPrivileged([{ scheme: 'swallow', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 let window: BrowserWindow | null = null;
 let service: AppService;
@@ -40,7 +41,7 @@ let importCommitStarted = false;
 let activeOperations = 0;
 let installingUpdate = false;
 let maintainingStorage = false;
-const pdfStore = new PdfStore(join(app.getPath('userData'), 'pdf'), resolve(currentDirectory, '../native/swallow-pdf'));
+const pdfStore = new PdfStore(join(app.getPath('userData'), 'pdf'), pdfHelper);
 const csp = `default-src 'self'; script-src 'self'${devUrl ? " 'unsafe-inline'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${devUrl ? "'self' ws://127.0.0.1:5173" : "'none'"}; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`;
 
 function uiLanguage(): AppLanguage {
