@@ -2,6 +2,8 @@
 
 원문을 작은 부분부터 읽고, 내 답변과 요점노트를 남기는 개인 학습용 macOS 데스크톱 앱입니다. 텍스트·Markdown·공개 문서 링크·PDF를 가져와 읽고, 로컬 음성으로 듣고, 회상·복습 기록을 저장할 수 있습니다.
 
+**[Swallow 소개 사이트](https://nemory-dev.github.io/swallow/)**에서 실제 앱 화면, 사용 흐름과 Mac 설치 안내를 볼 수 있습니다.
+
 자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따릅니다. 모든 기능은 무료이며 기능 유료 전환을 하지 않습니다. 선택적인 일회성 후원을 준비하고 있으며, 후원자 전용 혜택은 제공하지 않습니다. macOS Apple Silicon용 **[v0.1.0 미리보기 설치본](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0)**을 공개했습니다. 스토어 배포·자동 업데이트 feed는 제공하지 않습니다. GitHub의 **Code → Download ZIP**은 소스 파일이며 설치 프로그램이 아닙니다.
 
 ## DMG로 설치하기 — 릴리스 공개 후
