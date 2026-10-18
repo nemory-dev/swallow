@@ -75,6 +75,10 @@ export function serializeSmokeError(error, depth = 0) {
   return result;
 }
 async function ps(command, env = {}, label = 'PowerShell smoke command') {
+  const childEnv = { ...process.env, ...env, SWALLOW_PS_CONTEXT: label };
+  // A Node child of pwsh inherits PS7 module paths. Let Windows PowerShell
+  // construct its own defaults so Get-Acl/Set-Acl load the Desktop modules.
+  for (const key of Object.keys(childEnv)) if (key.toLowerCase() === 'psmodulepath') delete childEnv[key];
   const wrapped = `$ErrorActionPreference='Stop'; try {
     [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding;
     & { ${command} }
@@ -82,7 +86,7 @@ async function ps(command, env = {}, label = 'PowerShell smoke command') {
     $detail=[ordered]@{ operation=$env:SWALLOW_PS_CONTEXT; message=$_.Exception.Message; exceptionType=$_.Exception.GetType().FullName; category=$_.CategoryInfo.ToString(); errorId=$_.FullyQualifiedErrorId; position=$_.InvocationInfo.PositionMessage; scriptStack=$_.ScriptStackTrace };
     [Console]::Error.WriteLine(($detail | ConvertTo-Json -Depth 3 -Compress)); exit 1;
   }`;
-  return execute(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-InputFormat', 'Text', '-OutputFormat', 'Text', '-Command', wrapped], { env: { ...process.env, ...env, SWALLOW_PS_CONTEXT: label }, timeout: 60_000, label });
+  return execute(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-InputFormat', 'Text', '-OutputFormat', 'Text', '-Command', wrapped], { env: childEnv, timeout: 60_000, label });
 }
 function appEnvironment(data, extra = {}) {
   const env = { ...process.env, PATH: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32'), SWALLOW_DATA_DIR: data, SWALLOW_DEV_URL: 'https://packaged-must-ignore.invalid', ...extra };
