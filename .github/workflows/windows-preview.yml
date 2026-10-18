@@ -1,0 +1,142 @@
+name: Build and verify Windows x64 trial
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/windows-preview]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the requested revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node 24 x64
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          architecture: x64
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check public source allowlist
+        run: npm run source:check
+      - name: Run tests
+        run: npm test
+      - name: Build, package, re-extract and smoke the ZIP
+        id: package
+        run: npm run package:win:x64
+      - name: Upload intermediate app after build smoke passes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-preview-build-${{ github.run_id }}
+          path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.output }}/SHA256SUMS
+            ${{ steps.package.outputs.output }}/BUILD-INFO.json
+            ${{ steps.package.outputs.output }}/smoke/result.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Upload the separate synthetic test harness
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-preview-harness-${{ github.run_id }}
+          path: ${{ steps.package.outputs.harness }}
+          if-no-files-found: error
+          retention-days: 7
+
+  clean-smoke:
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 20
+    # No checkout: only the app archive and the standalone harness enter this VM.
+    steps:
+      - name: Set up test-tool Node 24 x64
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          architecture: x64
+      - name: Download the app archive and hashes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: windows-preview-build-${{ github.run_id }}
+          path: ${{ runner.temp }}/swallow-input/app
+      - name: Download only the standalone harness
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: windows-preview-harness-${{ github.run_id }}
+          path: ${{ runner.temp }}/swallow-input/harness
+      - name: Verify delivery checksums before execution
+        env:
+          APP_INPUT: ${{ runner.temp }}/swallow-input/app
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $entries = @(Get-Content -LiteralPath (Join-Path $env:APP_INPUT 'SHA256SUMS'))
+          if ($entries.Count -ne 2) { throw 'Unexpected checksum manifest' }
+          foreach ($entry in $entries) {
+            if ($entry -notmatch '^([a-f0-9]{64})  (Swallow-[a-zA-Z0-9.-]+-windows-x64-trial-unsigned.zip|BUILD-INFO.json)$') { throw 'Invalid checksum entry' }
+            $expected = $Matches[1]
+            $file = Join-Path $env:APP_INPUT $Matches[2]
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Checksum mismatch' }
+          }
+          $zips = @(Get-ChildItem -LiteralPath $env:APP_INPUT -Filter '*.zip')
+          if ($zips.Count -ne 1) { throw 'Exactly one app ZIP is required' }
+      - name: Install only pinned test-tool dependencies
+        working-directory: ${{ runner.temp }}/swallow-input/harness
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Smoke without source, installation writes or app network
+        env:
+          INPUT_ROOT: ${{ runner.temp }}/swallow-input
+          SMOKE_OUTPUT: ${{ runner.temp }}/swallow-smoke
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Get-ChildItem -LiteralPath (Join-Path $env:INPUT_ROOT 'app') -Filter '*.zip').FullName
+          node (Join-Path $env:INPUT_ROOT 'harness/test-packaged-windows.mjs') --zip $zip --fixtures (Join-Path $env:INPUT_ROOT 'harness/fixtures') --output $env:SMOKE_OUTPUT --absent-source $env:GITHUB_WORKSPACE --ci-restrictions
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare the candidate only after clean smoke passes
+        env:
+          INPUT_APP: ${{ runner.temp }}/swallow-input/app
+          FINAL_OUTPUT: ${{ runner.temp }}/swallow-candidate
+          SMOKE_OUTPUT: ${{ runner.temp }}/swallow-smoke
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path $env:FINAL_OUTPUT | Out-Null
+          Copy-Item -LiteralPath (Get-ChildItem -LiteralPath $env:INPUT_APP -Filter '*.zip').FullName -Destination $env:FINAL_OUTPUT
+          Copy-Item -LiteralPath (Join-Path $env:INPUT_APP 'SHA256SUMS'), (Join-Path $env:INPUT_APP 'BUILD-INFO.json') -Destination $env:FINAL_OUTPUT
+          Copy-Item -LiteralPath (Join-Path $env:INPUT_APP 'smoke/result.json') -Destination (Join-Path $env:FINAL_OUTPUT 'BUILD-SMOKE-RESULT.json')
+          Copy-Item -LiteralPath (Join-Path $env:SMOKE_OUTPUT 'result.json') -Destination (Join-Path $env:FINAL_OUTPUT 'CLEAN-SMOKE-RESULT.json')
+      - name: Upload the verified Windows trial candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Swallow-windows-x64-trial-${{ github.run_id }}
+          path: ${{ runner.temp }}/swallow-candidate/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Upload synthetic smoke diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-preview-smoke-diagnostics-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/swallow-smoke/*.json
+            ${{ runner.temp }}/swallow-smoke/*.png
+          if-no-files-found: ignore
+          retention-days: 7

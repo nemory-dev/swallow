@@ -22,7 +22,9 @@
     "source:prepare": "node scripts/prepare-public-source.mjs",
     "package:mac:arm64": "node scripts/package-macos.mjs",
     "make:mac:arm64": "node scripts/package-macos.mjs --dmg",
-    "test:packaged-ui": "node scripts/test-packaged-macos-ui.mjs"
+    "test:packaged-ui": "node scripts/test-packaged-macos-ui.mjs",
+    "package:win:x64": "node scripts/package-windows.mjs",
+    "test:packaged-win": "node scripts/test-packaged-windows.mjs"
   },
   "dependencies": {
     "ipaddr.js": "2.5.0",
@@ -33,12 +35,19 @@
   "devDependencies": {
     "@electron/asar": "4.3.1",
     "@electron/packager": "20.3.0",
+    "@napi-rs/canvas": "1.0.11",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/kor": "1.0.0",
     "@types/node": "^25.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.0",
     "electron": "44.7.0",
     "esbuild": "0.28.2",
+    "pdfjs-dist": "6.4.299",
+    "playwright": "1.64.1",
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "4.1.11"

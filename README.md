@@ -15,6 +15,12 @@ Swallow는 더 많은 기기와 AI 연결 방식으로 확장할 예정입니다
 
 현재 공개된 설치본은 **macOS Apple Silicon용 v0.1.0 미리보기**이며, AI 연결은 **Ollama 로컬 텍스트 모델**을 지원합니다. 위 내용은 향후 계획이며 추가 플랫폼·AI 연결은 아직 제공되지 않습니다. 구체적인 공개 일정과 지원 범위는 검증이 끝나는 대로 이 저장소와 [소개 사이트](https://nemory-dev.github.io/swallow/)에서 안내하겠습니다.
 
+### Windows 11 x64 시험판
+
+설치 관리자 없이 ZIP 전체를 풀어 실행하는 Windows 시험판의 빌드·검증 경로를 준비했습니다. Windows CI에서 실제 빌드와 독립 패키지 검증이 성공한 후보만 전달하며, 회사 Windows 11 PC의 실행 정책·실제 음성 출력은 별도로 확인해야 합니다. 현재 공개 macOS 릴리스에는 Windows 설치본이 없습니다.
+
+대상 조건, 체크섬 확인, 실행·데이터 저장 위치와 점검 순서는 [Windows 시험판 안내](docs/windows-preview.md)를 참고하세요. Windows x64 / Node 24 개발 환경에서는 `npm ci` 후 `npm test`, `npm run package:win:x64`로 빌드·ZIP 검증을 실행합니다.
+
 ## DMG로 설치하기 — 릴리스 공개 후
 
 대상은 **macOS 15.0 이상 / Apple Silicon(M1 이후 M 시리즈)**입니다. Intel Mac·Windows용 설치본은 없습니다. 최소 대상은 15.0으로 설정했으며 실제 확인한 기기는 macOS 15.6.1 / M1 Pro입니다. 다른 기기와 macOS 버전에서의 동작을 보장하지 않습니다. **설치본 실행에는 소스 코드·Node·npm·Xcode가 필요하지 않습니다.** Ollama도 AI 기능을 선택할 때만 필요합니다.
