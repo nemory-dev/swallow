@@ -2,16 +2,16 @@
 
 원문을 작은 부분부터 읽고, 내 답변과 요점노트를 남기는 개인 학습용 macOS 데스크톱 앱입니다. 텍스트·Markdown·공개 문서 링크·PDF를 가져와 읽고, 로컬 음성으로 듣고, 회상·복습 기록을 저장할 수 있습니다.
 
-자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따릅니다. 모든 기능은 무료이며 기능 유료 전환을 하지 않습니다. 선택적인 일회성 후원을 준비하고 있으며, 후원자 전용 혜택은 제공하지 않습니다. 현재는 **개발 미리보기**이며 첫 macOS DMG 릴리스를 준비 중입니다. **아직 다운로드용 릴리스를 공개하지 않았습니다.** 스토어 배포·자동 업데이트 feed도 제공하지 않습니다. GitHub의 **Code → Download ZIP**은 소스 파일이며 설치 프로그램이 아닙니다.
+자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따릅니다. 모든 기능은 무료이며 기능 유료 전환을 하지 않습니다. 선택적인 일회성 후원을 준비하고 있으며, 후원자 전용 혜택은 제공하지 않습니다. macOS Apple Silicon용 **[v0.1.0 미리보기 설치본](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0)**을 공개했습니다. 스토어 배포·자동 업데이트 feed는 제공하지 않습니다. GitHub의 **Code → Download ZIP**은 소스 파일이며 설치 프로그램이 아닙니다.
 
 ## DMG로 설치하기 — 릴리스 공개 후
 
 대상은 **macOS 15.0 이상 / Apple Silicon(M1 이후 M 시리즈)**입니다. Intel Mac·Windows용 설치본은 없습니다. 최소 대상은 15.0으로 설정했으며 실제 확인한 기기는 macOS 15.6.1 / M1 Pro입니다. 다른 기기와 macOS 버전에서의 동작을 보장하지 않습니다. **설치본 실행에는 소스 코드·Node·npm·Xcode가 필요하지 않습니다.** Ollama도 AI 기능을 선택할 때만 필요합니다.
 
-현재 후보는 로컬 ad-hoc 서명으로 앱 리소스 무결성 검사를 통과했습니다. macOS 15.6.1에서 Chrome으로 새로 받은 DMG의 SHA-256과 자동 다운로드 격리 속성을 확인하고, Applications 설치·아래의 앱별 허용·첫 학습·종료 후 재실행을 검증했습니다. 설치 사본의 PDF 표시·한영 OCR·노트 보존도 확인했습니다. 운영자의 최종 공개 승인 전까지 설치본은 비공개 초안으로 유지합니다.
+미리보기 설치본은 로컬 ad-hoc 서명으로 앱 리소스 무결성 검사를 통과했습니다. macOS 15.6.1에서 Chrome으로 새로 받은 DMG의 SHA-256과 자동 다운로드 격리 속성을 확인하고, Applications 설치·아래의 앱별 허용·첫 학습·종료 후 재실행을 검증했습니다. 설치 사본의 PDF 표시·한영 OCR·노트 보존도 확인했습니다.
 
-1. 이 저장소의 [Releases](https://github.com/nemory-dev/swallow/releases)에서 **v0.1.0 미리보기**를 엽니다. 지금은 최종 확인 전 초안이므로 일반 방문자에게 보이지 않습니다.
-2. 공개 후 **Assets**에서 `Swallow-0.1.0-macOS-arm64-unsigned.dmg`를 받습니다. `Source code (zip)`·`Source code (tar.gz)`는 설치본이 아닙니다.
+1. 이 저장소의 **[v0.1.0 미리보기 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0)**를 엽니다.
+2. **Assets**에서 `Swallow-0.1.0-macOS-arm64-unsigned.dmg`를 받습니다. `Source code (zip)`·`Source code (tar.gz)`는 설치본이 아닙니다.
 3. 기존 Swallow가 켜져 있다면 `⌘Q`로 종료합니다. 이미 학습 기록이 있다면 [저장·백업·삭제](#저장백업삭제)에 따라 먼저 백업하세요. 개발 실행과 설치본은 같은 기본 저장 위치를 사용합니다.
 4. DMG를 두 번 클릭하고, 안의 **Swallow.app을 Applications 폴더로 드래그**합니다. 설치 권한을 묻는 경우 본인이 권한을 확인합니다. 기존 앱을 교체할 때에는 앱을 완전히 종료한 뒤 진행하세요.
 5. Finder에서 Swallow 디스크 이미지를 추출한 뒤 **응용 프로그램 → Swallow**를 엽니다. DMG 안에서 계속 실행하지 마세요.
@@ -104,7 +104,7 @@ npm run make:mac:arm64     # 빌드 후 Swallow.app + DMG 생성
 
 생성한 `Swallow.app`을 별도 폴더로 복사해 실행하거나, 로컬 DMG를 열어 `Swallow.app`을 `Applications`로 옮길 수 있습니다. 완성된 앱에는 Electron과 PDF helper가 들어 있으므로 실행할 때 소스 폴더·Node·npm·Xcode·개발 서버가 필요하지 않습니다. Ollama는 AI를 선택적으로 사용할 때만 별도로 준비합니다. 앱을 옮겨도 학습 기록은 [기본 저장 위치](#저장백업삭제)에 남습니다. 개발 앱과 같은 저장 위치를 사용하므로 두 앱을 동시에 열지 말고, 별도 시험에는 절대 경로의 `SWALLOW_DATA_DIR`를 사용하세요.
 
-현재 산출물은 **Developer ID 미서명·Apple 미공증 미리보기 후보**입니다. 내부 파일이 바뀌지 않았는지 확인하는 인증서 없는 로컬 ad-hoc 서명은 포함합니다. 이는 개발자 신원이나 앱 안전성을 보증하지 않으며, 파일명의 `unsigned`는 Developer ID 서명·공증이 없다는 뜻입니다. 패키징 명령 자체는 GitHub 업로드·릴리스 공개·자동 업데이트 feed 생성을 수행하지 않습니다. 첫 릴리스는 별도 초안으로 준비하고 최종 확인 후 공개합니다. 다운로드한 사본에서는 macOS가 실행을 막을 수 있으므로 [설치와 보안 경고 안내](#dmg로-설치하기--릴리스-공개-후)를 먼저 확인하세요. 패키징 절차와 검증 명령은 [기여 안내](CONTRIBUTING.md#macos-패키징-검증)를 참고하세요.
+현재 산출물은 **Developer ID 미서명·Apple 미공증 미리보기**입니다. 내부 파일이 바뀌지 않았는지 확인하는 인증서 없는 로컬 ad-hoc 서명은 포함합니다. 이는 개발자 신원이나 앱 안전성을 보증하지 않으며, 파일명의 `unsigned`는 Developer ID 서명·공증이 없다는 뜻입니다. 패키징 명령 자체는 GitHub 업로드·릴리스 공개·자동 업데이트 feed 생성을 수행하지 않습니다. 공개 미리보기 설치본은 [v0.1.0 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0)에서 제공합니다. 다운로드한 사본에서는 macOS가 실행을 막을 수 있으므로 [설치와 보안 경고 안내](#dmg로-설치하기--릴리스-공개-후)를 먼저 확인하세요. 패키징 절차와 검증 명령은 [기여 안내](CONTRIBUTING.md#macos-패키징-검증)를 참고하세요.
 
 ## 실행이 막힐 때
 
