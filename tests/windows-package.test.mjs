@@ -221,4 +221,23 @@ describe('Windows x64 패키징', () => {
     const result = await runSmokeProcess(process.execPath, ['-e', "process.stdin.once('data',()=>{const b=Buffer.from('한글');process.stdout.write(b.subarray(0,1));setTimeout(()=>{process.stdout.write(b.subarray(1));process.exit(0)},30)});process.stdin.on('end',()=>process.exit(8));"], { input: '{}\n', keepInputOpen: true, timeout: 1000 });
     expect(result.stdout).toBe('한글');
   });
+  it('stderr가 빈 실패도 stdout·종료코드·작업 이름으로 진단한다', async () => {
+    const { runSmokeProcess } = await import('../scripts/test-packaged-windows.mjs');
+    let failure;
+    try { await runSmokeProcess(process.execPath, ['-e', "process.stdout.write('synthetic PowerShell failure');process.exitCode=23"], { label: 'CI restriction setup' }); }
+    catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain('synthetic PowerShell failure');
+    expect(failure.message).toContain('CI restriction setup');
+    expect(failure.diagnostic).toMatchObject({ exitCode: 23, signal: null, stdout: 'synthetic PowerShell failure', stderr: '' });
+  });
+  it('제한 설정 실패와 cleanup 실패를 모두 보존해 JSON 진단으로 내보낸다', async () => {
+    const { applyRestrictionsWithCleanup, serializeSmokeError } = await import('../scripts/test-packaged-windows.mjs');
+    const primary = Object.assign(new Error('synthetic apply failure'), { diagnostic: { exitCode: 1, stdout: 'apply details', stderr: '' } });
+    const cleanup = new Error('synthetic cleanup failure'); let failure;
+    try { await applyRestrictionsWithCleanup(async () => { throw primary; }, async () => { throw cleanup; }); }
+    catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(AggregateError); expect(failure.cause).toBe(primary);
+    expect(serializeSmokeError(failure)).toMatchObject({ errors: [{ message: 'synthetic apply failure', diagnostic: { stdout: 'apply details' } }, { message: 'synthetic cleanup failure' }] });
+  });
 });

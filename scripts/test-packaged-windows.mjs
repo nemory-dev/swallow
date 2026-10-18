@@ -3,7 +3,7 @@ import { access, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFi
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // This harness can be copied alone with synthetic fixtures. It never imports checkout code.
@@ -26,16 +26,23 @@ export async function verifyBuildResources(app, info) {
   }
 }
 
-function execute(command, args, { env = process.env, cwd, input, timeout = 180_000, maxBytes = 1_000_000, allowFailure = false, keepInputOpen = false } = {}) {
+function execute(command, args, { env = process.env, cwd, input, timeout = 180_000, maxBytes = 1_000_000, allowFailure = false, keepInputOpen = false, label = 'Packaged subprocess' } = {}) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(command, args, { env, cwd, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
     const stdout = [], stderr = []; let size = 0, finished = false;
     const finish = (error, value) => {
       if (finished) return; finished = true; clearTimeout(timer);
       if (error) {
+        const diagnostic = { operation: label, command: basename(command), exitCode: child.exitCode, signal: child.signalCode,
+          stdout: Buffer.concat(stdout).toString('utf8').slice(0, 4000), stderr: Buffer.concat(stderr).toString('utf8').slice(0, 4000) };
+        const failure = new Error(`${label} failed (exit=${diagnostic.exitCode ?? 'unknown'}, signal=${diagnostic.signal ?? 'none'}): ${error.message}\nstdout: ${diagnostic.stdout || '<empty>'}\nstderr: ${diagnostic.stderr || '<empty>'}`, { cause: error });
+        failure.diagnostic = diagnostic;
         // Kill only the process tree started by this harness, including an active PDF child.
-        if (process.platform === 'win32' && child.pid) spawnSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32/taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 10_000, stdio: 'ignore' });
-        child.kill(); reject(error);
+        if (child.exitCode === null && child.signalCode === null) {
+          if (process.platform === 'win32' && child.pid) spawnSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32/taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 10_000, stdio: 'ignore' });
+          child.kill();
+        }
+        reject(failure);
       } else resolveResult(value);
     };
     const timer = setTimeout(() => finish(new Error('Packaged smoke subprocess timed out.')), timeout);
@@ -50,7 +57,7 @@ function execute(command, args, { env = process.env, cwd, input, timeout = 180_0
       try {
         const decode = chunks => new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
         const out = decode(stdout), err = decode(stderr);
-        if (!allowFailure && code !== 0) finish(new Error(`Packaged subprocess failed (${signal ?? code}): ${err.slice(0, 2000)}`));
+        if (!allowFailure && code !== 0) finish(new Error(`Subprocess exit=${code ?? 'unknown'}, signal=${signal ?? 'none'}.`));
         else finish(undefined, { code, signal, stdout: out, stderr: err });
       } catch (error) { finish(error); }
     });
@@ -58,8 +65,23 @@ function execute(command, args, { env = process.env, cwd, input, timeout = 180_0
   });
 }
 export { execute as runSmokeProcess };
-async function ps(command, env = {}) {
-  return execute(powershell(), ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; " + command], { env: { ...process.env, ...env }, timeout: 60_000 });
+export function serializeSmokeError(error, depth = 0) {
+  if (depth > 5) return { message: 'Nested error limit reached' };
+  const result = { name: error?.name ?? 'Error', message: error?.message ?? String(error) };
+  for (const field of ['diagnostic', 'cleanupStage', 'restrictionState']) if (error?.[field] !== undefined) result[field] = error[field];
+  if (error?.cause) result.cause = serializeSmokeError(error.cause, depth + 1);
+  if (error instanceof AggregateError) result.errors = error.errors.map(item => serializeSmokeError(item, depth + 1));
+  return result;
+}
+async function ps(command, env = {}, label = 'PowerShell smoke command') {
+  const wrapped = `$ErrorActionPreference='Stop'; try {
+    [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding;
+    & { ${command} }
+  } catch {
+    $detail=[ordered]@{ operation=$env:SWALLOW_PS_CONTEXT; message=$_.Exception.Message; exceptionType=$_.Exception.GetType().FullName; category=$_.CategoryInfo.ToString(); errorId=$_.FullyQualifiedErrorId; position=$_.InvocationInfo.PositionMessage; scriptStack=$_.ScriptStackTrace };
+    [Console]::Error.WriteLine(($detail | ConvertTo-Json -Depth 3 -Compress)); exit 1;
+  }`;
+  return execute(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-InputFormat', 'Text', '-OutputFormat', 'Text', '-Command', wrapped], { env: { ...process.env, ...env, SWALLOW_PS_CONTEXT: label }, timeout: 60_000, label });
 }
 function appEnvironment(data, extra = {}) {
   const env = { ...process.env, PATH: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32'), SWALLOW_DATA_DIR: data, SWALLOW_DEV_URL: 'https://packaged-must-ignore.invalid', ...extra };
@@ -157,17 +179,39 @@ export function restrictionCleanupCommands(id) {
 }
 export async function cleanupRestrictions(id, run) {
   const commands = restrictionCleanupCommands(id), failures = [];
+  const stages = ['cleanup firewall rules', 'cleanup firewall profiles', 'cleanup installation ACL'];
   // Independent invocations ensure ACL recovery is attempted even when firewall recovery fails.
-  for (const command of commands) { try { await run(command); } catch (error) { failures.push(error); } }
+  for (const [index, command] of commands.entries()) { try { await run(command, stages[index]); } catch (error) { error.cleanupStage = stages[index]; failures.push(error); } }
   if (failures.length) throw new AggregateError(failures, 'CI restriction cleanup failed: ' + failures.map(error => error.message).join('; '));
+}
+export async function applyRestrictionsWithCleanup(apply, cleanup) {
+  try { await apply(); }
+  catch (primary) {
+    try { await cleanup(); }
+    catch (recovery) { throw new AggregateError([primary, recovery], `CI restriction setup failed: ${primary.message}; cleanup also failed: ${recovery.message}`, { cause: primary }); }
+    throw primary;
+  }
+}
+async function restrictionState(temporary) {
+  const state = {};
+  try {
+    const bytes = await readFile(join(temporary, 'firewall-profiles.json'));
+    const text = bytes[0] === 255 && bytes[1] === 254 ? bytes.subarray(2).toString('utf16le') : bytes.toString('utf8').replace(/^\uFEFF/, '');
+    const value = JSON.parse(text); const profiles = Array.isArray(value) ? value : [value];
+    state.profileBackup = profiles.map(profile => ({ Name: ['Domain', 'Private', 'Public'].includes(profile.Name) ? profile.Name : '<unexpected profile>',
+      Enabled: ['string', 'number', 'boolean'].includes(typeof profile.Enabled) ? profile.Enabled : null, EnabledType: typeof profile.Enabled }));
+  } catch (error) { state.profileBackupError = error.code === 'ENOENT' ? 'not-created' : error.message; }
+  try { await access(join(temporary, 'acl.txt')); state.aclBackupCreated = true; }
+  catch (error) { state.aclBackupCreated = false; if (error.code !== 'ENOENT') state.aclBackupError = error.message; }
+  return state;
 }
 async function restrictions(app, temporary) {
   assert.equal(process.env.CI, 'true', 'Installation ACL/firewall restrictions are allowed only in the isolated CI runner.');
   const id = 'SwallowSmoke-' + randomUUID();
   const env = { SWALLOW_SMOKE_APP: app, SWALLOW_SMOKE_RULE: id, SWALLOW_SMOKE_ACL: join(temporary, 'acl.txt'), SWALLOW_SMOKE_PROFILES: join(temporary, 'firewall-profiles.json') };
-  const cleanup = () => cleanupRestrictions(id, command => ps(command, env));
+  const cleanup = () => cleanupRestrictions(id, (command, stage) => ps(command, env, stage));
   try {
-    await ps(`
+    await applyRestrictionsWithCleanup(() => ps(`
       ${ruleGuard} ${exactRuleNames}
       if ((Get-Service MpsSvc).Status -ne 'Running') { throw 'Windows Firewall service is not running'; }
       Get-NetFirewallProfile | Select-Object Name,Enabled | ConvertTo-Json | Set-Content -LiteralPath $env:SWALLOW_SMOKE_PROFILES;
@@ -178,9 +222,9 @@ async function restrictions(app, temporary) {
       $acl=Get-Acl -LiteralPath $env:SWALLOW_SMOKE_APP; [IO.File]::WriteAllText($env:SWALLOW_SMOKE_ACL,$acl.Sddl);
       $identity=[Security.Principal.WindowsIdentity]::GetCurrent().User;
       $rule=[Security.AccessControl.FileSystemAccessRule]::new($identity, [Security.AccessControl.FileSystemRights]'Write,Delete,DeleteSubdirectoriesAndFiles', [Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit', [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Deny);
-      $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:SWALLOW_SMOKE_APP -AclObject $acl;`, env);
+      $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:SWALLOW_SMOKE_APP -AclObject $acl;`, env, 'apply CI restrictions'), cleanup);
     return cleanup;
-  } catch (error) { await cleanup(); throw error; }
+  } catch (error) { error.restrictionState = await restrictionState(temporary); throw error; }
 }
 
 async function speechSmoke(app, data, env) {
@@ -296,10 +340,10 @@ async function main() {
     assert.deepEqual(unexpected, [], 'OCR must not write language cache outside the installation.');
     await sourceAbsent(values['--absent-source']); report.status = 'passed';
   } catch (error) {
-    report.status = 'failed'; report.error = error.message; throw error;
+    report.status = 'failed'; report.error = error.message; report.failure = serializeSmokeError(error); throw error;
   } finally {
     try { if (cleanup) await cleanup(); }
-    catch (error) { report.status = 'failed'; report.cleanupError = error.message; throw error; }
+    catch (error) { report.status = 'failed'; report.cleanupError = error.message; report.cleanupFailure = serializeSmokeError(error); report.restrictionState = await restrictionState(temporary); throw error; }
     finally { await writeFile(join(output, 'result.json'), JSON.stringify(report, null, 2) + '\n'); await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
   }
   console.log(JSON.stringify(report, null, 2));
