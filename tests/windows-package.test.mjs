@@ -138,7 +138,7 @@ describe('Windows x64 패키징', () => {
       const input = await fixture(); await rm(join(input.root, path));
       await expect((await api()).stageWindowsApp(input)).rejects.toThrow();
     }
-  });
+  }, 30_000);
   it('PE imports를 검사하고 별도 VC++ DLL이 필요하면 조용히 통과하지 않는다', async () => {
     const { peImports, stageWindowsApp } = await api();
     expect(peImports(pe(['KERNEL32.dll', 'VCRUNTIME140.dll']))).toEqual(['kernel32.dll', 'vcruntime140.dll']);

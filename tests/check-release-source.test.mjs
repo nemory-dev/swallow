@@ -67,7 +67,8 @@ test('newlines in tracked names do not hide blocked paths', t => {
   const root = repository(t, ['LICENSE', 'THIRD_PARTY_NOTICES.md']);
   // The checker reads the index, and Windows cannot create a newline-named file.
   const object = execFileSync('git', ['-C', root, 'hash-object', '-w', '--stdin'], { input: 'synthetic', encoding: 'utf8' }).trim();
-  execFileSync('git', ['-C', root, 'update-index', '--add', '--cacheinfo', '100644', object, 'artifacts/a\nb.zip']);
+  // Limit this exception to the synthetic index-only command; never check it out.
+  execFileSync('git', ['-c', 'core.protectNTFS=false', '-C', root, 'update-index', '--add', '--cacheinfo', '100644', object, 'artifacts/a\nb.zip']);
   const { status, report } = run(root);
   assert.equal(status, 1);
   assert.equal(report.blockedPathCount, 1);
