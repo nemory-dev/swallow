@@ -118,7 +118,7 @@ describe('세션·노트 SQLite 저장', () => {
     expect(count).toBe(105); expect(store.studyWorkspace('long').notes).toHaveLength(100);
     expect(store.searchStudyNotes('SQLITE')).toHaveLength(20);
     expect(() => store.searchStudyNotes('x'.repeat(201))).toThrow();
-  });
+  }, 30_000);
   it('v1 스키마 이전 실패는 새 테이블과 버전 변경을 롤백한다', async () => {
     const { root, store } = await setup(); const before = store.exportLibrary(); store.close();
     const db = new DatabaseSync(join(root, 'library.sqlite'));

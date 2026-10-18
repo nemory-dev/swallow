@@ -26,23 +26,31 @@ describe('Windows PDF 엔진의 실제 로컬 처리', () => {
     expect(pdfFactoryDirectory('C:\\Program Files\\Swallow\\한글\\cmaps')).toBe('C:/Program Files/Swallow/한글/cmaps/');
     expect(pdfFactoryDirectory('/app/standard_fonts/')).toBe('/app/standard_fonts/');
   });
-  it('부모 앱이 강제 종료되면 PDF 작업도 종료한다', async () => {
-    const root = await directory(), script = join(root, 'parent.cjs');
-    await writeFile(script, `const {spawn}=require('node:child_process');
-const child=spawn(process.execPath,[process.argv[2],'--parent-pid',String(process.pid),'inspect',process.argv[3]],{stdio:['ignore','ignore','ignore',3]});
-child.on('spawn',()=>process.stdout.write(String(child.pid)+'\\n'));
-setInterval(()=>{},1000);`);
-    const frame = await new Promise((resolveResult, reject) => {
-      const parent = spawn(process.execPath, [script, resolve('dist-electron/native/pdf-runtime/worker.mjs'), fixture('scan.pdf')], { stdio: ['ignore', 'pipe', 'ignore', 'pipe'] });
-      let output = '', childPid;
-      const timer = setTimeout(() => { parent.kill('SIGKILL'); if (childPid) { try { process.kill(childPid, 'SIGKILL'); } catch {} } reject(new Error('orphaned PDF worker')); }, 5000);
-      parent.stdout.once('data', data => { childPid = Number(String(data).trim()); parent.kill('SIGKILL'); });
-      parent.stdio[3].on('data', data => { output += data; });
-      parent.on('error', error => { clearTimeout(timer); reject(error); });
-      parent.on('close', () => { clearTimeout(timer); try { resolveResult(JSON.parse(output)); } catch { reject(new Error('missing cancelled frame')); } });
-    });
-    expect(frame).toEqual({ ok: false, error: 'cancelled' });
-  }, 10_000);
+  it('감시 대상 부모가 강제 종료되면 PDF 작업도 종료한다', async () => {
+    const root = await directory(), entry = join(root, 'worker.mjs');
+    await writeFile(entry, await readFile(resolve('native/windows-pdf/worker.mjs')));
+    // Hold a request open and report readiness after the actual worker installs
+    // its watchdog. Real PDF/OCR processing is covered by the engine cases below.
+    await writeFile(join(root, 'runtime.mjs'), `export class PdfFailure extends Error {}
+export async function processPdf() { setInterval(()=>{},1000); process.stdout.write('ready\\n'); await new Promise(()=>{}); }`);
+    const parent = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
+    const parentClosed = new Promise((resolveResult, reject) => { parent.once('close', resolveResult); parent.once('error', reject); });
+    let child;
+    try {
+      const frame = await new Promise((resolveResult, reject) => {
+        // Vitest owns the result pipe independently of the watched process.
+        child = spawn(process.execPath, [entry, '--parent-pid', String(parent.pid), 'inspect', fixture('scan.pdf')], { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
+        let output = '', diagnostics = '';
+        const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('orphaned PDF worker')); }, 10_000);
+        child.stdout.once('data', () => parent.kill('SIGKILL'));
+        child.stdio[3].on('data', data => { output += data; });
+        child.stderr.on('data', data => { diagnostics += data; });
+        child.once('error', error => { clearTimeout(timer); reject(error); });
+        child.once('close', () => { clearTimeout(timer); try { resolveResult(JSON.parse(output)); } catch { reject(new Error('missing cancelled frame: ' + diagnostics.slice(0, 500))); } });
+      });
+      expect(frame).toEqual({ ok: false, error: 'cancelled' });
+    } finally { child?.kill('SIGKILL'); parent.kill('SIGKILL'); await parentClosed; }
+  }, 15_000);
   it('번들 언어 데이터가 없으면 외부 다운로드 대신 실패한다', async () => {
     const root = await directory();
     await expect(ocrLanguages(root)).rejects.toMatchObject({ code: 'resources' });

@@ -73,10 +73,10 @@ describe('Windows x64 패키징', () => {
   });
   it('일반 production 앱과 Windows PDF closure를 나누고 내부 파일을 복사하지 않는다', async () => {
     const input = await fixture(); const result = await (await api()).stageWindowsApp(input);
-    expect(await readdir(input.stage)).toEqual(['LICENSE', 'THIRD_PARTY_NOTICES.md', 'dist', 'dist-electron', 'node_modules', 'package.json']);
-    expect(await readdir(join(input.stage, 'node_modules'))).toEqual(['runtime', 'shared']);
-    expect(await readdir(join(input.stage, 'dist/assets'))).toEqual(['main.js']);
-    expect(await readdir(join(input.stage, 'dist-electron/electron'))).toEqual(['main.js', 'preload.cjs']);
+    expect((await readdir(input.stage)).sort()).toEqual(['LICENSE', 'THIRD_PARTY_NOTICES.md', 'dist', 'dist-electron', 'node_modules', 'package.json'].sort());
+    expect((await readdir(join(input.stage, 'node_modules'))).sort()).toEqual(['runtime', 'shared'].sort());
+    expect((await readdir(join(input.stage, 'dist/assets'))).sort()).toEqual(['main.js'].sort());
+    expect((await readdir(join(input.stage, 'dist-electron/electron'))).sort()).toEqual(['main.js', 'preload.cjs'].sort());
     const packages = result.pdfDependencies.map(record => record.name);
     expect(packages).toContain('@napi-rs/canvas-win32-x64-msvc'); expect(packages).toContain('shared');
     expect(packages).not.toContain('@napi-rs/canvas-darwin-arm64'); expect(packages).not.toContain('tooling');

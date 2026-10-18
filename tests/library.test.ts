@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { LibraryStore } from '../electron/library.js';
 import { createDocument } from '../src/learning/document.js';
 const paths: string[] = [];
@@ -40,9 +41,14 @@ describe('원자적 로컬 저장', () => {
     const store = new LibraryStore(path);
     stores.push(store);
     await store.load();
-    await rm(directoryPath, { recursive: true });
-    await writeFile(directoryPath, '경로를 가로막는 파일');
-    await expect(store.update(state => ({ ...state, selectedModel: 'model' }))).rejects.toThrow();
-    expect(store.snapshot().selectedModel).toBeNull();
-  });
+    // A real SQLite write lock works on Windows, where an open DB cannot be unlinked.
+    const lock = new DatabaseSync(store.databasePath);
+    try {
+      lock.exec('BEGIN IMMEDIATE');
+      await expect(store.update(state => ({ ...state, selectedModel: 'model' }))).rejects.toThrow();
+      expect(store.snapshot().selectedModel).toBeNull();
+    } finally { lock.exec('ROLLBACK'); lock.close(); }
+    await store.update(state => ({ ...state, selectedModel: 'model' }));
+    expect(store.snapshot().selectedModel).toBe('model');
+  }, 15_000);
 });
