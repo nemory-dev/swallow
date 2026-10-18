@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
 import { access, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
@@ -311,7 +312,9 @@ async function main() {
   }
   for (const key of ['--zip', '--fixtures', '--output']) assert.ok(values[key], key + ' is required');
   const output = values['--output']; await mkdir(output, { recursive: true });
-  const temporary = await mkdtemp(join(tmpdir(), 'swallow-win-smoke-'));
+  // Windows TEMP can contain an 8.3 alias (RUNNER~1). Use the native final
+  // path consistently for execution, firewall application rules and ACLs.
+  const temporary = realpathSync.native(await mkdtemp(join(tmpdir(), 'swallow-win-smoke-')));
   const extracted = join(temporary, '한글 압축 해제'), data = join(temporary, '학습 데이터'), fixtures = join(temporary, '합성 PDF');
   await mkdir(data); await mkdir(fixtures);
   for (const name of ['diagram.pdf', 'scan.pdf', 'encrypted.pdf', 'too-many-pages.pdf']) await copyFile(join(values['--fixtures'], name), join(fixtures, name));
