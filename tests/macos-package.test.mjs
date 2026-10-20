@@ -20,7 +20,8 @@ async function fixture() {
   return { root, put, stage: join(root, 'stage'), native: join(root, 'native-stage') };
 }
 const stage = stageMacApp;
-describe('macOS 앱의 배포 파일 선별', () => {
+// macOS staging intentionally requires POSIX executable modes; Windows staging has its own suite.
+describe.skipIf(process.platform === 'win32')('macOS 앱의 배포 파일 선별', () => {
   it('빌드 결과와 잠긴 production 의존성만 포함한다', async () => {
     const input = await fixture(); await stage(input);
     expect(await readdir(input.stage).catch(() => [])).toEqual(['LICENSE', 'THIRD_PARTY_NOTICES.md', 'dist', 'dist-electron', 'node_modules', 'package.json']);
@@ -75,7 +76,7 @@ describe('패키징 실행 환경', () => {
 });
 
 // Build trees may contain stale compiler outputs or accidentally copied personal files.
-it('renderer 참조가 누락되거나 dist 밖을 가리키면 중단한다', async () => {
+it.skipIf(process.platform === 'win32')('renderer 참조가 누락되거나 dist 밖을 가리키면 중단한다', async () => {
   const input = await fixture();
   await input.put('dist/index.html', '<script src="./assets/missing.js"></script>');
   await expect(stage(input)).rejects.toThrow(/missing.js/);

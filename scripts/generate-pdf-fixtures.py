@@ -1,7 +1,7 @@
 from pathlib import Path
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from PIL import Image, ImageDraw, ImageFont
 # Test fixtures only. Requires reportlab, pypdf and Pillow; no app runtime dependency.
 out = Path(__file__).resolve().parent.parent / 'tests/fixtures/pdf'
@@ -33,6 +33,9 @@ d.rectangle((100,500,420,750),outline='blue',width=6);d.rectangle((780,500,1100,
 d.text((150,590),'Water',font=f,fill='black');d.text((820,590),'Vapor',font=f,fill='black');d.line((440,620,760,620),fill='black',width=8);d.line((760,620,735,600),fill='black',width=8);d.line((760,620,735,640),fill='black',width=8)
 c=canvas.Canvas(str(out/'scan.pdf'),pagesize=(600,800));c.drawImage(ImageReader(im),0,0,600,800);c.save()
 w=PdfWriter();w.append(str(out/'diagram.pdf'));w.encrypt('test-password');w.write(str(out/'encrypted.pdf'))
+w=PdfWriter();w.append(str(out/'diagram.pdf'));w.encrypt(user_password='',owner_password='fixture-owner-password',algorithm='AES-128');w.write(str(out/'owner-encrypted.pdf'))
+w=PdfWriter();page=PdfReader(str(out/'diagram.pdf')).pages[0];page.rotate(90);w.add_page(page);w.write(str(out/'rotated.pdf'))
+w=PdfWriter();w.add_blank_page(width=600,height=800);w.write(str(out/'blank.pdf'))
 c=canvas.Canvas(str(out/'too-many-pages.pdf'),pagesize=(100,100))
 for _ in range(301): c.drawString(5,50,'page');c.showPage()
 c.save()

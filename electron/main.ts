@@ -4,7 +4,7 @@ import { app, autoUpdater, BrowserWindow, dialog, ipcMain, net, protocol, shell 
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, basename, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { readUpdateConfiguration, UpdateService } from './update.js';
 import { LibraryStore } from './library.js';
 import { AppService } from './app-service.js';
@@ -12,8 +12,9 @@ import { toPublicError, localizeText, errorText, PublicError } from '../src/shar
 import { translate, type AppLanguage } from '../src/shared/i18n.js';
 import { OllamaProvider } from './ollama.js';
 import { NativeSpeech, installedVoices } from './speech.js';
+import { WindowsSpeech, installedWindowsVoices } from './windows-speech.js';
 import { PdfStore } from './pdf.js';
-import { runtimePaths } from './runtime.js';
+import { desktopDataDirectory, pdfWorkerEnvironment, runtimePaths } from './runtime.js';
 import { fetchDocumentUrl } from './document-url.js';
 import { getDocument, getUnit } from '../src/learning/document.js';
 import { studyPassage } from '../src/learning/session.js';
@@ -21,27 +22,29 @@ import { termSearchUrl } from './study-input.js';
 import type { SpeechInput, SpeechCommand, AddDocumentInput, StudyAction } from '../src/shared/types.js';
 
 app.setName('Swallow');
-const override = process.env.SWALLOW_DATA_DIR;
-if (override) {
-  if (!isAbsolute(override)) throw new Error('SWALLOW_DATA_DIR은 절대 경로여야 합니다.');
-  app.setPath('userData', override);
-}
+try {
+  const dataDirectory = desktopDataDirectory({ platform: process.platform, override: process.env.SWALLOW_DATA_DIR, localAppData: process.env.LOCALAPPDATA });
+  if (dataDirectory) { mkdirSync(dataDirectory, { recursive: true, mode: 0o700 }); app.setPath('userData', dataDirectory); }
+} catch { dialog.showErrorBox('Swallow 시작 실패', '사용자 저장 폴더를 열 수 없습니다. 저장 공간과 권한을 확인하세요.'); app.exit(1); }
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const distDirectory = resolve(currentDirectory, '../../dist');
-const { devUrl, homeUrl, pdfHelper } = runtimePaths({
+const { devUrl, homeUrl, pdfHelper, windowsPdfWorker, speechHelper } = runtimePaths({
   packaged: app.isPackaged, resourcesPath: process.resourcesPath, currentDirectory, devUrl: process.env.SWALLOW_DEV_URL,
 });
 protocol.registerSchemesAsPrivileged([{ scheme: 'swallow', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 let window: BrowserWindow | null = null;
 let service: AppService;
-const speech = new NativeSpeech();
+const speech = process.platform === 'win32' ? new WindowsSpeech(speechHelper) : new NativeSpeech();
+const desktopVoices = () => process.platform === 'win32' ? installedWindowsVoices(speechHelper) : installedVoices();
 let fetchingDocument = false;
 let importing: AbortController | null = null;
 let importCommitStarted = false;
 let activeOperations = 0;
 let installingUpdate = false;
 let maintainingStorage = false;
-const pdfStore = new PdfStore(join(app.getPath('userData'), 'pdf'), pdfHelper);
+const pdfStore = new PdfStore(join(app.getPath('userData'), 'pdf'), process.platform === 'win32'
+  ? { command: process.execPath, args: ['--max-old-space-size=512', windowsPdfWorker, '--parent-pid', String(process.pid)], env: pdfWorkerEnvironment(process.env), resultFd: 3 }
+  : pdfHelper);
 const csp = `default-src 'self'; script-src 'self'${devUrl ? " 'unsafe-inline'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${devUrl ? "'self' ws://127.0.0.1:5173" : "'none'"}; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`;
 
 function uiLanguage(): AppLanguage {
@@ -185,7 +188,7 @@ else {
       if (!doc.pdf?.pages.some(value => value.page === page)) throw new Error('PDF 페이지를 찾을 수 없습니다.');
       return pdfStore.render(doc.pdf.assetId, page as number);
     });
-    registerHandler('speech-voices', () => installedVoices());
+    registerHandler('speech-voices', desktopVoices);
     registerHandler('speech-state', () => speech.state);
     registerHandler('speak', async input => {
       const options = input as SpeechInput;
@@ -252,7 +255,7 @@ else {
     const maintenanceTimer = setInterval(maintain, 24 * 60 * 60 * 1000); maintenanceTimer.unref();
     app.once('will-quit', () => clearInterval(maintenanceTimer));
     app.on('activate', () => { if (!window) createWindow(); });
-  }).catch(() => { dialog.showErrorBox(nativeText('Swallow 시작 실패'), nativeText('앱 초기화에 실패했습니다. 의존성과 macOS 저장 권한을 확인해 주세요.')); app.quit(); });
+  }).catch(() => { dialog.showErrorBox(nativeText('Swallow 시작 실패'), nativeText('앱 초기화에 실패했습니다. 앱 파일과 사용자 저장 폴더의 권한을 확인해 주세요.')); app.quit(); });
   app.on('will-quit', () => { speech.control('stop'); importing?.abort(); service?.dispose(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

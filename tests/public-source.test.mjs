@@ -17,7 +17,7 @@ async function fixture() {
     'README.md': '# Swallow\nLocal learning app',
     'SECURITY.md': 'nemory.dev@gmail.com', 'CONTRIBUTING.md': 'npm test', 'PRIVACY.md': 'Local storage',
     'THIRD_PARTY_NOTICES.md': 'React MIT', 'tsconfig.json': '{}', 'tsconfig.electron.json': '{}',
-    'vite.config.ts': '', 'vitest.config.ts': '', 'index.html': '<html></html>', '.nvmrc': '24', '.gitignore': 'node_modules/',
+    'vite.config.ts': '', 'vitest.config.ts': '', 'index.html': '<html></html>', '.nvmrc': '24', '.gitignore': 'node_modules/', '.gitattributes': '*.pdf binary\n',
     'src/app.ts': 'export const local = true;', 'electron/main.ts': 'export const local = true;',
     'native/pdf.swift': '// fixture', 'scripts/build.mjs': '// fixture', 'tests/example.test.ts': '// fixture',
   };
@@ -25,6 +25,19 @@ async function fixture() {
   return root;
 }
 describe('구독 없는 공개 소스 검사와 내보내기', () => {
+  it('Windows helper·안내·workflow만 추가 공개하고 내부 docs는 제외한다', async () => {
+    const { inspectPublicSource } = await import('../scripts/prepare-public-source.mjs');
+    const root = await fixture();
+    for (const path of ['native/windows', 'docs/release', 'docs/superpowers', '.github/workflows']) await mkdir(join(root, path), { recursive: true });
+    await writeFile(join(root, 'native/windows/speech.cs'), '// local speech helper');
+    await writeFile(join(root, 'docs/windows-preview.md'), '# Windows preview');
+    await writeFile(join(root, '.github/workflows/windows-preview.yml'), 'name: Windows preview');
+    await writeFile(join(root, 'docs/release/internal.md'), 'PRIVATE_DATA');
+    const result = await inspectPublicSource(root);
+    expect(result.status).toBe('ready');
+    expect(result.files.map(file => file.path)).toEqual(expect.arrayContaining(['native/windows/speech.cs', 'docs/windows-preview.md', '.github/workflows/windows-preview.yml']));
+    expect(result.files.some(file => file.path.startsWith('docs/release/') || file.path.startsWith('docs/superpowers/'))).toBe(false);
+  });
   it('현재 앱의 source·lock·빌드에서 구독 SDK를 실제 제외해야 한다', async () => {
     const { inspectPublicSource } = await import('../scripts/prepare-public-source.mjs');
     const result = await inspectPublicSource(process.cwd());
@@ -62,9 +75,12 @@ describe('구독 없는 공개 소스 검사와 내보내기', () => {
     const root = await fixture();
     await writeFile(join(root, 'electron/token.json'), '{"token":"USER_SECRET"}');
     await writeFile(join(root, 'src/unknown.bin'), 'PRIVATE_BYTES');
-    await symlink(join(root, '.gitignore'), join(root, 'src/link.ts'));
+    // NTFS directory junctions exercise the real lstat rejection without symlink privileges.
+    await symlink(join(root, process.platform === 'win32' ? 'electron' : '.gitignore'), join(root, 'src/link.ts'), process.platform === 'win32' ? 'junction' : 'file');
     const result = await inspectPublicSource(root);
     expect(result.issues.map(issue => issue.code)).toEqual(expect.arrayContaining(['unexpected-file', 'symlink']));
+    expect(result.issues).toContainEqual({ code: 'symlink', path: 'src/link.ts' });
+    expect(result.files.some(file => file.path.startsWith('src/link.ts'))).toBe(false);
     expect(JSON.stringify(result)).not.toContain('USER_SECRET');
   });
 });

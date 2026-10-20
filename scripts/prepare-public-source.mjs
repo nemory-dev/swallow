@@ -4,10 +4,12 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const rootFiles = ['package.json', 'package-lock.json', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'PRIVACY.md',
-  'THIRD_PARTY_NOTICES.md', 'tsconfig.json', 'tsconfig.electron.json', 'vite.config.ts', 'vitest.config.ts', 'index.html', '.nvmrc', '.gitignore'];
+  'THIRD_PARTY_NOTICES.md', 'tsconfig.json', 'tsconfig.electron.json', 'vite.config.ts', 'vitest.config.ts', 'index.html', '.nvmrc', '.gitignore', '.gitattributes'];
 const sourceDirectories = ['src', 'electron', 'native', 'scripts', 'tests'];
+const publicExtras = ['docs/windows-preview.md', '.github/workflows/windows-preview.yml'];
+const nativeSources = ['native/windows/speech.cs'];
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.css', '.swift', '.py', '.md']);
-const pdfFixtures = new Set(['diagram.pdf', 'encrypted.pdf', 'long.pdf', 'scan.pdf', 'too-many-pages.pdf']);
+const pdfFixtures = new Set(['diagram.pdf', 'encrypted.pdf', 'long.pdf', 'scan.pdf', 'too-many-pages.pdf', 'owner-encrypted.pdf', 'rotated.pdf', 'blank.pdf']);
 const excludedSource = ['vendor/siwc', 'electron/gemini.ts', 'electron/credential-encryption.ts', 'tests/gemini.test.ts',
   'tests/gemini-service.test.ts', 'tests/credential-encryption.test.ts', 'scripts/test-gemini-ui.mjs'];
 const blockedPath = /(?:^|\/)(?:\.git|\.aws|\.ssh|chatgpt|userData|user-data|backups|node_modules|dist|dist-electron|coverage)(?:\/|$)|(?:^|\/)(?:token|credentials?|auth)\.json$|\.(?:sqlite|sqlite3|db|p12|pfx|pem|key|keystore|jks)(?:-wal|-shm)?$/i;
@@ -30,7 +32,7 @@ export async function inspectPublicSource(root = process.cwd()) {
       return;
     }
     const binaryFixture = path.startsWith('tests/fixtures/pdf/') && pdfFixtures.has(path.slice('tests/fixtures/pdf/'.length));
-    if (!info.isFile() || (!rootFiles.includes(path) && !textExtensions.has(extname(path)) && !binaryFixture) || info.size > 4_000_000) {
+    if (!info.isFile() || (!rootFiles.includes(path) && !publicExtras.includes(path) && !nativeSources.includes(path) && !textExtensions.has(extname(path)) && !binaryFixture) || info.size > 4_000_000) {
       issue('unexpected-file', path); return;
     }
     const bytes = await readFile(join(root, path));
@@ -63,6 +65,7 @@ export async function inspectPublicSource(root = process.cwd()) {
   }
   for (const path of rootFiles) await inspect(path, true);
   for (const path of sourceDirectories) await inspect(path, true);
+  for (const path of publicExtras) await inspect(path);
   const published = new Set(files.map(file => file.path));
   for (const file of files.filter(file => extname(file.path) === '.md')) {
     const text = await readFile(join(root, file.path), 'utf8');

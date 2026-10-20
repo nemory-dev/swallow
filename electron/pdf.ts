@@ -5,10 +5,28 @@ import { join } from 'node:path';
 import { MAX_PDF_BYTES, MAX_PDF_PAGES, pdfSource } from '../src/learning/pdf.js';
 import type { AddDocumentInput, PdfPage } from '../src/shared/types.js';
 
-export function runPdfHelper(executable: string, args: string[], signal?: AbortSignal, timeout = 120_000, maxBytes = 10_000_000): Promise<unknown> {
+export interface PdfLaunch { command: string; args: string[]; env?: NodeJS.ProcessEnv; resultFd: 3 }
+const pdfErrors: Record<string, string> = {
+  cancelled: 'PDF 작업을 취소했습니다.',
+  invalid: 'PDF가 손상되었거나 읽을 수 없습니다. 파일 권한과 형식을 확인하세요.',
+  encrypted: '암호화된 PDF는 지원하지 않습니다. 암호가 없는 사본을 선택하세요.',
+  pages: 'PDF는 1~300쪽까지 지원합니다. 파일을 나누어 가져오세요.',
+  textLimit: 'PDF 추출 원문은 100만 자 이내여야 합니다. 파일을 나누어 가져오세요.',
+  render: 'PDF 페이지 이미지가 너무 큽니다.',
+  pageSize: 'PDF 페이지 크기가 잘못되었습니다.',
+  size: 'PDF 파일은 40MB 이내로 선택해 주세요.',
+  ocr: 'PDF 텍스트/OCR 처리에 실패했습니다. 원본을 확인하고 다시 시도하세요.',
+  resources: 'PDF 처리 도구가 없습니다. 앱 전체를 다시 설치하고 파일 권한을 확인하세요.',
+  request: 'PDF 처리 요청이 잘못되었습니다.',
+};
+export function runPdfHelper(executable: string | PdfLaunch, args: string[], signal?: AbortSignal, timeout = 120_000, maxBytes = 10_000_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('PDF 작업을 취소했습니다.')); return; }
-    const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const framed = typeof executable !== 'string';
+    const child = framed
+      ? spawn(executable.command, [...executable.args, ...args], { shell: false, windowsHide: true, env: executable.env, stdio: ['ignore', 'ignore', 'pipe', 'pipe'] })
+      : spawn(executable, args, { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const output = framed ? child.stdio[3] as import('node:stream').Readable : child.stdout!;
     let bytes = 0; const chunks: Buffer[] = []; let stderr = ''; let finished = false;
     const finish = (error?: Error, value?: unknown) => {
       if (finished) return;
@@ -18,11 +36,21 @@ export function runPdfHelper(executable: string, args: string[], signal?: AbortS
     const abort = () => finish(new Error('PDF 작업을 취소했습니다.'));
     const timer = setTimeout(() => finish(new Error('PDF 처리 시간이 초과되었습니다. 파일을 작은 단위로 나누어 다시 시도하세요.')), timeout);
     signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', (chunk: Buffer) => { bytes += chunk.length; if (bytes > maxBytes) finish(new Error('PDF 처리 결과가 제한을 초과했습니다.')); else chunks.push(chunk); });
-    child.stderr.on('data', chunk => { if (stderr.length < 2000) stderr += String(chunk).slice(0, 2000 - stderr.length); });
-    child.on('error', () => finish(new Error('PDF 도구를 실행하지 못했습니다. macOS에서 npm run build를 실행하고 파일 권한을 확인하세요.')));
+    output.on('data', (chunk: Buffer) => { bytes += chunk.length; if (bytes > maxBytes) finish(new Error('PDF 처리 결과가 제한을 초과했습니다.')); else chunks.push(chunk); });
+    output.on('error', () => finish(new Error('PDF 처리 결과를 읽을 수 없습니다.')));
+    child.stderr!.on('data', chunk => { if (stderr.length < 2000) stderr += String(chunk).slice(0, 2000 - stderr.length); });
+    child.on('error', () => finish(new Error('PDF 처리 도구가 없습니다. 앱 전체를 다시 설치하고 파일 권한을 확인하세요.')));
     child.on('close', code => {
       if (finished) return;
+      if (framed) {
+        try {
+          const frame = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          if (code === 0 && frame?.ok === true && Object.hasOwn(frame, 'value')) finish(undefined, frame.value);
+          else if (frame?.ok === false) finish(new Error(typeof frame.error === 'string' && Object.hasOwn(pdfErrors, frame.error) ? pdfErrors[frame.error] : 'PDF 처리에 실패했습니다. 파일 손상과 권한을 확인하세요.'));
+          else finish(new Error('PDF 처리 결과를 읽을 수 없습니다.'));
+        } catch { finish(new Error('PDF 처리 결과를 읽을 수 없습니다.')); }
+        return;
+      }
       if (code !== 0) { finish(new Error(/[가-힣]/.test(stderr) ? stderr.slice(0, 400) : 'PDF 처리에 실패했습니다. 파일 손상과 권한을 확인하세요.')); return; }
       try { finish(undefined, JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
       catch { finish(new Error('PDF 처리 결과를 읽을 수 없습니다.')); }
@@ -61,7 +89,7 @@ export class PdfStore {
   private rendering: Promise<unknown> = Promise.resolve();
   private pending = 0;
   private readonly cache = new Map<string, string>();
-  constructor(private readonly directory: string, private readonly executable: string) {}
+  constructor(private readonly directory: string, private readonly executable: string | PdfLaunch) {}
   private path(assetId: string) {
     if (!/^[a-f0-9]{64}$/.test(assetId)) throw new Error('PDF 원본 ID가 잘못되었습니다.');
     return join(this.directory, `${assetId}.pdf`);

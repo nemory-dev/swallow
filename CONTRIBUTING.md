@@ -6,7 +6,9 @@ Swallow의 자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)를 따�
 
 지원하는 개발용 Node 버전은 **24 LTS (`24.x`)**입니다. `package.json`·lockfile의 프로젝트 선언과 `.nvmrc`를 함께 맞춥니다. Node 22·25·26은 지원 범위가 아니며, npm이 경고만 출력하더라도 Node 24로 전환한 뒤 작업하세요. 의존성 자체의 `engines` 범위는 해당 패키지의 선언이므로 일괄 수정하지 않습니다.
 
-앱과 PDF helper의 최소 대상은 macOS 15.0 / Apple Silicon (arm64)이며, 실제 확인한 환경은 macOS 15.6.1 / Apple Silicon입니다. macOS 15.0 기기·다른 macOS 버전·Intel Mac·Windows는 아직 검증하지 않았습니다. Git과 PDF helper 빌드를 위한 Xcode Command Line Tools가 필요합니다. 도구가 없다면 [README의 준비 절차](README.md#소스로-실행하기--개발자용)를 따르세요. 현재 검증 기기는 Xcode 전체 설치 환경이며 Command Line Tools만 설치한 환경은 별도 확인이 필요합니다.
+macOS 앱과 Swift PDF helper의 최소 대상은 macOS 15.0 / Apple Silicon (arm64)이며, 실제 확인한 환경은 macOS 15.6.1 / Apple Silicon입니다. macOS 15.0 기기·다른 macOS 버전·Intel Mac은 아직 검증하지 않았습니다. Git과 Swift PDF helper 빌드를 위한 Xcode Command Line Tools가 필요합니다. 도구가 없다면 [README의 준비 절차](README.md#소스로-실행하기--개발자용)를 따르세요. 현재 검증 기기는 Xcode 전체 설치 환경이며 Command Line Tools만 설치한 환경은 별도 확인이 필요합니다.
+
+Windows 11 x64 시험판의 별도 빌드·패키지 검증 절차는 [Windows 안내](docs/windows-preview.md#개발자-패키징과-검증)를 따릅니다. Windows CI의 Server 검증과 실제 Windows 11 기기의 음성·실행 정책 검증은 구분해 기록합니다.
 
 새 작업 폴더에서:
 
