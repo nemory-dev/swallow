@@ -130,7 +130,8 @@ describe('Windows x64 패키징', () => {
     const input = await fixture(); await input.put('node_modules/runtime/' + 'x'.repeat(151), 'not allowed');
     await expect((await api()).stageWindowsApp(input)).rejects.toThrow(/150/);
     await rm(join(input.root, 'node_modules/runtime/' + 'x'.repeat(151)));
-    await symlink(join(input.root, '.env'), join(input.root, 'node_modules/runtime/leak.js'));
+    // Use a real directory junction on Windows; file symlinks require extra OS privileges.
+    await symlink(join(input.root, process.platform === 'win32' ? 'docs' : '.env'), join(input.root, 'node_modules/runtime/leak.js'), process.platform === 'win32' ? 'junction' : 'file');
     await expect((await api()).stageWindowsApp(input)).rejects.toThrow(/symbolic link/);
   });
   it('필수 PDF 자원·언어 데이터·helper 누락을 거부한다', async () => {

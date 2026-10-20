@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,15 +16,28 @@ const data = await mkdtemp(join(tmpdir(), 'swallow-update-ui-'));
 const artifacts = join(root, 'artifacts'); await mkdir(artifacts, { recursive: true });
 const errors = [];
 const bootstrapRoot = await mkdtemp(join(tmpdir(), 'swallow-update-bootstrap-'));
+const resources = join(bootstrapRoot, 'resources'); await mkdir(resources);
+// Match the installed native/ and Windows pdf-runtime/ layout using local build resources.
+await symlink(join(root, 'dist-electron/native'), join(resources, 'native'), process.platform === 'win32' ? 'junction' : 'dir');
+if (process.platform === 'win32') await symlink(join(root, 'dist-electron/native/pdf-runtime'), join(resources, 'pdf-runtime'), 'junction');
 await writeFile(join(bootstrapRoot, 'update-config.json'), JSON.stringify({ feeds: { [process.platform]: { [process.arch]: 'https://updates.example.com/test-only.json' } } }));
 const bootstrap = join(bootstrapRoot, 'main.cjs');
-// The actual main/preload/renderer/IPC run unchanged. Only native network/installation are replaced.
+// The actual main/preload/renderer/IPC run unchanged. Fake only native update
+// network/installation and the exact Windows installer-presence probe.
 await writeFile(bootstrap, `
 const { app, autoUpdater } = require('electron');
 Object.defineProperty(app, 'isPackaged', { value: true });
-Object.defineProperty(process, 'resourcesPath', { value: ${JSON.stringify(join(root, 'dist-electron'))} });
+Object.defineProperty(process, 'resourcesPath', { value: ${JSON.stringify(resources)} });
 app.getAppPath = () => ${JSON.stringify(bootstrapRoot)};
 app.getVersion = () => '0.1.0';
+if (process.platform === 'win32') {
+  const fs = require('node:fs');
+  const { dirname, resolve } = require('node:path');
+  const installer = resolve(dirname(process.execPath), '..', 'Update.exe');
+  const existsSync = fs.existsSync;
+  fs.existsSync = path => path === installer ? process.env.SWALLOW_TEST_WINDOWS_INSTALLER === '1' : existsSync(path);
+  require('node:module').syncBuiltinESMExports();
+}
 const harness = { native: autoUpdater, checks: 0, installs: 0 };
 autoUpdater.setFeedURL = () => {};
 autoUpdater.checkForUpdates = () => { harness.checks++; autoUpdater.emit('update-available'); };
@@ -41,8 +54,8 @@ async function savedWorkspace(id) {
   try { await store.load(); return store.studyWorkspace(id); } finally { store.close(); }
 }
 
-async function withApp(synthetic, operation) {
-  const env = { ...process.env, SWALLOW_DATA_DIR: data }; delete env.SWALLOW_DEV_URL;
+async function withApp(synthetic, operation, { windowsInstaller = true } = {}) {
+  const env = { ...process.env, SWALLOW_DATA_DIR: data, SWALLOW_TEST_WINDOWS_INSTALLER: windowsInstaller ? '1' : '0' }; delete env.SWALLOW_DEV_URL;
   const app = await electron.launch({ executablePath: electronPath, args: [synthetic ? bootstrap : '.'], cwd: root, env, timeout: 30_000 });
   let page;
   try {
@@ -87,6 +100,16 @@ await withApp(false, async (_app, page) => {
   await panel(page).getByText('개발 실행에서는 업데이트를 사용할 수 없습니다.', { exact: false }).waitFor();
   await page.screenshot({ path: join(artifacts, 'update-development.png'), fullPage: true });
 });
+if (process.platform === 'win32') await withApp(true, async (app, page) => {
+  await openPanel(page);
+  assert.equal((await page.evaluate(() => window.swallow.getUpdateState())).status, 'unavailable');
+  await panel(page).getByText('이 설치 방식에서는 앱 내 업데이트를 지원하지 않습니다.', { exact: true }).waitFor();
+  assert.equal(await panel(page).getByRole('button', { name: '업데이트 확인', exact: true }).isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.swallow.checkForUpdates().then(() => false, () => true)), true);
+  assert.equal(await app.evaluate(() => globalThis.__swallowUpdateTest.checks), 0);
+  assert.equal(await app.evaluate(() => globalThis.__swallowUpdateTest.installs), 0);
+  await page.screenshot({ path: join(artifacts, 'update-windows-zip.png'), fullPage: true });
+}, { windowsInstaller: false });
 let id;
 const answer = '업데이트 전에 학습 답변을 저장합니다.';
 await withApp(true, async (app, page) => {
@@ -199,5 +222,6 @@ await withApp(true, async (app, page) => {
   assert.equal(library.documents.find(doc => doc.id === library.activeDocumentId).pdf.pages[0].note, '업데이트 버튼이 자동으로 저장한 PDF 메모');
 });
 console.log('업데이트 UI 통과: 개발 실행 안내, 다운로드 상태, 변경 내용 텍스트, 실패 재시도, 공부/자유 읽기 답변 저장 후 설치 요청, 저장 실패·화면 전환 후 메모리 초안·PDF 메모 오류 시 설치 차단.');
+if (process.platform === 'win32') console.log('Windows ZIP 업데이트 미지원·네이티브 호출 차단 및 합성 설치형 업데이트의 저장 보호를 각각 검증했습니다.');
 console.log('합성 네이티브 이벤트 사용. 실제 다운로드·앱 교체·AI 요청·Google 인증 없음. Renderer pageerrors: 0');
 console.log('임시 데이터: ' + data);

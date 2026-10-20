@@ -75,9 +75,12 @@ describe('구독 없는 공개 소스 검사와 내보내기', () => {
     const root = await fixture();
     await writeFile(join(root, 'electron/token.json'), '{"token":"USER_SECRET"}');
     await writeFile(join(root, 'src/unknown.bin'), 'PRIVATE_BYTES');
-    await symlink(join(root, '.gitignore'), join(root, 'src/link.ts'));
+    // NTFS directory junctions exercise the real lstat rejection without symlink privileges.
+    await symlink(join(root, process.platform === 'win32' ? 'electron' : '.gitignore'), join(root, 'src/link.ts'), process.platform === 'win32' ? 'junction' : 'file');
     const result = await inspectPublicSource(root);
     expect(result.issues.map(issue => issue.code)).toEqual(expect.arrayContaining(['unexpected-file', 'symlink']));
+    expect(result.issues).toContainEqual({ code: 'symlink', path: 'src/link.ts' });
+    expect(result.files.some(file => file.path.startsWith('src/link.ts'))).toBe(false);
     expect(JSON.stringify(result)).not.toContain('USER_SECRET');
   });
 });
