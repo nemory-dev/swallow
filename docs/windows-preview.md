@@ -87,3 +87,20 @@ node scripts/test-packaged-windows.mjs --zip C:\build\Swallow.zip --fixtures C:\
 ```
 
 CI의 두 번째 job은 소스를 checkout하지 않고 앱 ZIP과 별도 하네스만 받습니다. 테스트 도구용 Node·Playwright는 사용하지만 앱과 PDF 자식에는 `System32`만 PATH로 전달합니다. 설치 폴더 쓰기 거절을 실제 검사하고, `Swallow.exe`와 음성 helper의 외부 통신을 Windows Firewall로 차단한 뒤 PDF/OCR·SQLite·재실행·WAV·UI를 시험합니다. `--ci-restrictions`는 이 격리된 CI에서만 사용하며 끝나면 ACL·방화벽 규칙과 프로필을 복구합니다. 사용자 PC의 권한·방화벽을 변경하는 절차가 아닙니다.
+
+### CI 자동 실행과 결과 확인
+
+`Build and verify Windows x64 trial`은 `main` push와 `main` 대상 PR의 생성·재오픈·커밋 갱신 때 실행됩니다. 작업 브랜치의 push만으로는 실행하지 않아 같은 변경의 push·PR 중복 실행을 피합니다. Actions의 **Run workflow**로 선택한 브랜치를 수동 검증할 수도 있습니다. 자동 실행은 문서 변경도 포함하며, 한 번의 전체 검증에 Windows runner 두 job을 사용합니다.
+
+같은 PR에 새 커밋이 올라오면 이전 실행을 취소하고 최신 변경을 검증합니다. `main` push와 수동 실행은 별도 그룹을 사용하며, 같은 이벤트·ref의 진행 중 검사는 취소하지 않습니다. 그룹마다 대기 실행은 최신 한 개만 유지하므로 연속 요청 시 이전 대기 실행은 취소될 수 있습니다. [GitHub concurrency 규칙](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)을 따릅니다.
+
+PR 검증은 PR과 대상 브랜치를 합친 임시 merge commit을 checkout하므로 `BUILD-INFO.json`의 commit이 PR head와 다를 수 있습니다. PR artifact는 통합 검증용이며 일반 배포 승인이 아닙니다. 전달할 후보는 `main` 또는 명시적으로 선택한 ref의 전체 workflow 성공과 commit을 확인한 뒤 선택하세요. fork PR은 저장소 정책에 따라 실행 승인 대기가 생길 수 있고, 충돌한 PR은 충돌을 해결해야 검증됩니다. [GitHub PR 이벤트 규칙](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)을 참고하세요.
+
+GitHub의 PR 검사 또는 Actions 화면에서 **build**와 **clean-smoke**가 모두 성공했는지 확인합니다. CLI로 `main` 실행 목록을 조회할 수도 있습니다.
+
+```sh
+gh run list --workflow windows-preview.yml --branch main
+gh run view <실행-ID>
+```
+
+실패한 job의 로그에서 의존성 설치·source 검사·테스트·패키징·독립 smoke 중 어느 단계가 실패했는지 먼저 확인하세요. 실패·취소·승인 대기 결과를 성공한 후보로 사용하지 않습니다. 수동 실행·재실행도 runner 사용량을 늘리므로 오류 원인을 확인한 뒤 필요한 실행만 요청하세요.

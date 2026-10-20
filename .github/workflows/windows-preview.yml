@@ -3,14 +3,16 @@ name: Build and verify Windows x64 trial
 on:
   workflow_dispatch:
   push:
-    branches: [codex/windows-preview]
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-preview-${{ github.ref }}
-  cancel-in-progress: true
+  group: windows-preview-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
