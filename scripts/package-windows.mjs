@@ -118,6 +118,7 @@ async function main() {
     await writeFile(join(output, 'SHA256SUMS'), `${sha256(await readFile(zip))}  ${zipName}\n${sha256(await readFile(join(output, 'BUILD-INFO.json')))}  BUILD-INFO.json\n`);
     const harness = join(output, 'harness'); await mkdir(join(harness, 'fixtures'), { recursive: true });
     await copyFile(join(root, 'scripts/test-packaged-windows.mjs'), join(harness, 'test-packaged-windows.mjs'));
+    await copyFile(join(root, 'scripts/test-chatgpt-ui.mjs'), join(harness, 'test-chatgpt-ui.mjs'));
     for (const name of ['diagram.pdf', 'scan.pdf', 'encrypted.pdf', 'too-many-pages.pdf']) await copyFile(join(root, 'tests/fixtures/pdf', name), join(harness, 'fixtures', name));
     const playwrightVersion = JSON.parse(await readFile(join(root, 'node_modules/playwright/package.json'), 'utf8')).version;
     if (metadata.devDependencies.playwright !== playwrightVersion) throw new Error('Playwright version differs from the pin.');

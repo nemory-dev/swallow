@@ -4,7 +4,7 @@ import { access, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFi
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { basename, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // This harness can be copied alone with synthetic fixtures. It never imports checkout code.
@@ -342,6 +342,19 @@ async function main() {
     }
     report.speech = await speechSmoke(app, data, env);
     report.ui = await uiSmoke(app, temporary, fixtures, output, values['--absent-source']);
+    const subscriptionOutput = join(temporary, 'subscription-test');
+    try {
+      await execute(process.execPath, [join(dirname(script), 'test-chatgpt-ui.mjs'), executable], {
+        env: appEnvironment(data, { SWALLOW_TEST_OUTPUT: subscriptionOutput }), cwd: temporary,
+        label: 'Packaged ChatGPT synthetic UI and Windows OS encryption', timeout: 180_000,
+      });
+    } finally {
+      const screenshots = join(subscriptionOutput, 'screenshots');
+      const names = await readdir(screenshots).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+      for (const name of names.filter(name => /^[a-z-]+\.png$/.test(name))) await copyFile(join(screenshots, name), join(output, 'chatgpt-' + name));
+    }
+    report.chatgpt = JSON.parse(await readFile(join(subscriptionOutput, 'result.json'), 'utf8'));
+    assert.equal(report.chatgpt.status, 'passed');
     await verifyBuildResources(app, info); assert.equal(hash(await readFile(join(app, 'resources/app.asar'))), before);
     const unexpected = (await readdir(temporary, { recursive: true })).filter(path => /\.traineddata(?:\.gz)?$/.test(path) && !path.startsWith('한글 압축 해제'));
     assert.deepEqual(unexpected, [], 'OCR must not write language cache outside the installation.');

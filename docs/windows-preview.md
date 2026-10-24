@@ -1,23 +1,23 @@
 # Windows x64 베타 실행 안내
 
-**[Windows 베타 1 다운로드](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0-windows-beta.1)** · Windows 11 / Intel·AMD x64 · 모든 기능 무료 · 회원가입 불필요
+**[Windows ChatGPT 베타 다운로드](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)** · Windows 11 / Intel·AMD x64 · 모든 기능 무료 · 회원가입 불필요
 
-이 문서는 Windows용 ZIP 베타의 실행 절차입니다. 공개 베타 1은 앱 버전 `0.1.0`, 소스 `c28bf97`의 검증된 설치본입니다. 재빌드하지 않고 공개해 파일명에는 `trial-unsigned`가 남아 있습니다. Windows CI와 Windows 25H2 x64 장비에서 저장·PDF·한영 음성 제어를 확인했으며 **실제 스피커·헤드폰 청취는 아직 미확인**입니다. 다른 장비·배율·회사 실행 정책까지 보장하지 않습니다. 릴리스의 `BUILD-INFO.json`과 `VERIFICATION-Windows-ko.md`에서 대상과 확인 범위를 볼 수 있습니다.
+이 문서는 앱 버전 `0.1.1-beta.1`의 Windows x64 ZIP 베타 실행 절차입니다. ChatGPT 공식 구독 연결을 포함하며 파일명에는 기존 패키징 표기인 `trial-unsigned`가 남아 있습니다. 정확한 소스 commit은 릴리스의 `BUILD-INFO.json`, Windows CI 및 합성 인증 시험 범위는 `VERIFICATION-Windows-ko.md`를 확인하세요. **이 버전의 실제 Windows PC·ChatGPT 계정 로그인·스피커/헤드폰 청취는 미확인**입니다. 이전 `0.1.0`의 Windows 25H2 장비 결과를 새 버전의 통과로 계산하지 않습니다. 다른 장비·배율·회사 실행 정책까지 보장하지 않습니다.
 
 ## 준비 사항
 
 - Windows 11, Intel/AMD x64 PC와 사용자가 쓸 수 있는 로컬 폴더가 필요합니다. Windows ARM64·32비트는 이번 시험 대상이 아닙니다.
 - ZIP 전체를 해제할 공간이 필요합니다. 짧은 로컬 경로를 사용하세요. 예: `C:\Users\사용자\Apps\Swallow`.
 - 실행에 Node.js·npm·소스 코드·Python·Swift·별도 OCR 도구는 필요하지 않습니다. Ollama는 로컬 AI 기능을 사용할 때만 별도로 준비합니다.
-- 회사 PC에서는 조직의 실행·자료 처리 정책을 따르세요. 앱과 학습 자료를 개인 서비스에 업로드할 필요가 없습니다.
+- 회사 PC에서는 조직의 실행·자료 처리 정책을 따르세요. AI 없이 로컬 학습을 사용할 수 있습니다. ChatGPT 연결을 선택하면 필요한 원문·질문·답안이 OpenAI로 전송되므로 먼저 조직의 자료 처리 정책을 확인하세요.
 
 ## 파일 확인과 실행
 
-1. [공개 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0-windows-beta.1)의 **Assets**에서 `Swallow-0.1.0-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 받습니다. `Source code (zip)`은 앱 설치 파일이 아닙니다. 개발자 검증용 GitHub Actions artifact를 받는 경우에는 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…`**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
+1. [공개 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)의 **Assets**에서 `Swallow-0.1.1-beta.1-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 받습니다. `Source code (zip)`은 앱 설치 파일이 아닙니다. 개발자 검증용 GitHub Actions artifact를 받는 경우에는 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…`**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
 2. PowerShell에서 파일명이 일치하는지 확인하고 다음 명령으로 해시를 구합니다. `SHA256SUMS`의 같은 파일명 행과 모든 문자가 같아야 합니다.
 
    ```powershell
-   Get-FileHash -Algorithm SHA256 .\Swallow-0.1.0-windows-x64-trial-unsigned.zip
+   Get-FileHash -Algorithm SHA256 .\Swallow-0.1.1-beta.1-windows-x64-trial-unsigned.zip
    Get-Content .\SHA256SUMS
    ```
 
@@ -34,9 +34,20 @@
 3. 한국어·영어가 포함된 짧은 스캔 PDF를 가져와 OCR 텍스트를 원본과 대조합니다. 추출과 OCR은 설치본의 로컬 자원을 사용하며 언어 데이터를 실행 중 다운로드하지 않습니다.
 4. 읽어 주기를 시작하고 일시정지·계속·중지를 확인합니다. 한국어와 영어 음성이 모두 보이면 언어별로 시험합니다.
 5. 앱을 완전히 종료한 뒤 다시 열어 문서·답변·요점노트·PDF 메모와 이미지가 남아 있는지 확인합니다.
-6. 오프라인 사용을 확인하려면 앱의 로컬 읽기·저장·PDF/OCR·음성을 시험합니다. 공개 웹 문서 가져오기에는 인터넷이 필요하고, AI 기능에는 별도로 실행 중인 로컬 Ollama가 필요합니다.
+6. 오프라인 사용을 확인하려면 앱의 로컬 읽기·저장·PDF/OCR·음성을 시험합니다. 공개 웹 문서 가져오기에는 인터넷이 필요하고, Ollama AI에는 별도로 실행 중인 로컬 Ollama가, ChatGPT 구독 연결에는 인터넷과 사용 가능한 계정 권한이 필요합니다.
 
 PDF는 파일당 40MB, 최대 300쪽 제한이 있습니다. 가져오기 시간 제한은 120초이며, 이는 300쪽 스캔 처리를 보장하는 시간이 아닙니다. 스캔은 문자 인식에 시간이 걸리므로 먼저 1~2쪽으로 시험하고 큰 파일은 나눠 주세요. 암호화·손상된 PDF는 거절합니다. OCR은 글자·표·수식·배치가 틀릴 수 있으므로 원본과 비교하세요.
+
+## ChatGPT 구독 연결 — 베타
+
+1. 상단 **AI 연결 → ChatGPT 구독 연결 · 베타**에서 외부 전송·구독 사용량/허용 크레딧·저장·계정 제한 안내를 읽고 동의합니다.
+2. **Continue with ChatGPT**를 누르고 기본 브라우저의 공식 OpenAI 페이지에서 직접 로그인·허용합니다. 거절하거나 앱에서 **로그인 취소**를 누를 수 있습니다. 로컬 callback·브라우저 실행이 회사 정책에 막히면 IT 담당자에게 문의하세요.
+3. **모델 설정**에서 `· ChatGPT` 모델을 선택한 뒤 설명·피드백·번역 초안을 요청합니다. 실행 자격·모델·한도는 OpenAI가 결정하며 무제한 사용을 보장하지 않습니다.
+4. 재시작 후 **AI 연결 → ChatGPT 모델 확인**으로 저장된 연결을 엽니다. 앱 시작만으로 외부 AI 요청을 보내지 않습니다. **사용량 관리**에서 권한·한도를 확인하고 **ChatGPT 연결 해제**로 원격 철회·로컬 토큰 삭제를 요청합니다.
+
+Windows 인증정보는 Electron의 비동기 OS 보호(DPAPI)를 사용하는 암호화 파일로 저장합니다. 같은 Windows 사용자로 실행되는 다른 프로그램에 대한 완전한 격리는 보장하지 않습니다. 다른 PC/사용자에게 인증 파일을 복사하지 말고 그 환경에서 새로 로그인하세요. 보호 기능이나 저장 권한을 사용할 수 없으면 연결을 중단합니다. SQLite·PDF 학습 자료는 별도로 암호화하지 않습니다.
+
+Swallow는 무료지만 ChatGPT 요청은 기존 구독 허용량 또는 계정에서 허용한 크레딧을 사용할 수 있습니다. 설명 후 검토·번역 분할로 한 동작에 여러 요청이 생길 수 있습니다. 약관 위반·오남용 시 앱 차단이나 계정 정지·종료 위험이 있습니다. Gemini·Claude 연결, 자동 유료 API 전환·계정 순환은 제공하지 않습니다. 상세 전송·사용량·복구 절차는 [ChatGPT 베타 안내](https://github.com/nemory-dev/swallow/blob/main/docs/chatgpt-beta.md)를 확인하세요.
 
 ## 읽어 주기
 
@@ -48,7 +59,7 @@ Windows의 로컬 System.Speech/SAPI5 음성만 사용합니다. 인터넷 음�
 
 ## 저장 위치와 백업
 
-기본 저장 위치는 `%LOCALAPPDATA%\Swallow`입니다. 파일 탐색기 주소창에 이 경로를 붙여 넣으면 열립니다. ZIP을 새로 풀거나 앱 폴더를 옮겨도 학습 자료는 이 별도 위치에 남습니다. 자료는 앱 자체에서 암호화하지 않습니다.
+기본 저장 위치는 `%LOCALAPPDATA%\Swallow`입니다. 파일 탐색기 주소창에 이 경로를 붙여 넣으면 열립니다. ZIP을 새로 풀거나 앱 폴더를 옮겨도 학습 자료는 이 별도 위치에 남습니다. 학습 자료는 앱 자체에서 암호화하지 않습니다. ChatGPT 인증정보만 별도 OS 보호를 사용합니다.
 
 백업할 때는 앱을 완전히 종료하고 `Swallow` 데이터 폴더 전체를 별도 보관하세요. SQLite DB 하나만 복사하면 PDF 원본·백업·추가 기록을 놓칠 수 있습니다. PDF 원본·legacy 파일·백업은 문서 삭제 후에도 남을 수 있습니다. 데이터를 삭제하거나 덮어쓰기 전에 백업을 확인하세요.
 
@@ -63,6 +74,8 @@ Windows의 로컬 System.Speech/SAPI5 음성만 사용합니다. 인터넷 음�
 | PDF 가져오기 실패 | 40MB·쪽 수·암호 여부 확인. 작은 정상 PDF로 재시험. 기존 자료는 보존하고 오류 문구 확인 |
 | 스캔 처리 시간 초과 | 페이지를 나누어 재시도. OCR 처리 중 취소 후 원본과 기존 자료 확인 |
 | 읽어 주기 오류 | SAPI5 음성 가용성, 오디오 출력, helper 실행 차단 확인 |
+| ChatGPT 로그인/암호화 실패 | 기본 브라우저·인터넷·로컬 callback 허용·Windows 계정 보호·저장 폴더 권한 확인. 다른 앱 토큰이나 인증 파일 복사 금지 |
+| ChatGPT 한도/권한 오류 | 사용량 관리에서 권한·한도를 확인하고 나중에 모델 확인 재시도. 자동 과금 전환 없음 |
 | 저장 실패 | `%LOCALAPPDATA%\Swallow`의 로컬 저장 권한과 디스크 공간 확인. 백업 전 DB 삭제 금지 |
 
 문의를 전달할 때는 Windows 버전·CPU·앱 버전·commit·오류 문구·재현 순서를 적으세요. 개인 DB, PDF, 학습 원문, 답안, 토큰은 첨부하지 마세요. 자동 업데이트는 제공하지 않으며 새 ZIP을 수동으로 받아 전체 해제하는 방식입니다.
