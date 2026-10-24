@@ -6,19 +6,19 @@ Swallow는 원문을 작은 부분부터 읽고, 내 말로 답하고, 요점노
 
 | 지금 다운로드 | 지원 기기 | 설치 파일 |
 | --- | --- | --- |
-| **[Windows 베타 1](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0-windows-beta.1)** | Windows 11 · Intel/AMD x64 | ZIP 전체를 풀고 `Swallow.exe` 실행 |
+| **[Windows 베타 0.1.1](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)** | Windows 11 · Intel/AMD x64 | ZIP 전체를 풀고 `Swallow.exe` 실행 |
 | **[Mac 베타 0.1.1](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)** | macOS 15 이상 · Apple Silicon(M1 이후) | DMG를 열고 응용 프로그램 폴더로 복사 |
 
 설치본 실행에 Node.js·npm·소스 코드는 필요하지 않습니다. **[실제 앱 화면과 설치 안내](https://nemory-dev.github.io/swallow/)**를 먼저 살펴보세요. GitHub의 **Code → Download ZIP**과 릴리스의 **Source code**는 앱 설치 파일이 아닙니다.
 
-**새 Mac 베타 `0.1.1-beta.1`은 기존 ChatGPT 구독 연결을 제공합니다.** OpenAI 공식 로그인 후 Swallow 안에서 설명·피드백·번역 초안을 요청할 수 있습니다. 현재 공개 Windows `0.1.0-windows-beta.1`에는 이 기능이 없습니다. 사용법·구독 사용량·계정 제한 위험·검증 범위는 [ChatGPT 베타 안내](docs/chatgpt-beta.md)를 확인하세요.
+**Windows·Mac 베타 `0.1.1-beta.1`은 기존 ChatGPT 구독 연결을 제공합니다.** OpenAI 공식 로그인 후 Swallow 안에서 설명·피드백·번역 초안을 요청할 수 있습니다. 사용법·구독 사용량·계정 제한 위험·검증 범위는 [ChatGPT 베타 안내](docs/chatgpt-beta.md)를 확인하세요.
 
-현재 Windows는 코드 서명 없는 베타, Mac은 Developer ID 서명·Apple 공증 없는 베타이며 자동 업데이트는 제공하지 않습니다. Windows 음성 재생 제어는 확인했지만 **실제 스피커·헤드폰 청취 확인은 남아 있습니다.** [Windows 안내](docs/windows-preview.md)와 아래 Mac 설치 안내에서 확인 범위와 실행 절차를 볼 수 있습니다.
+현재 Windows는 코드 서명 없는 베타, Mac은 Developer ID 서명·Apple 공증 없는 베타이며 자동 업데이트는 제공하지 않습니다. 새 Windows 설치본은 CI의 합성 ChatGPT·OS 암호화·저장/PDF 시험을 통과했습니다. **실제 Windows PC의 ChatGPT 로그인·추론과 스피커·헤드폰 청취는 미확인**입니다. [Windows 안내](docs/windows-preview.md)와 아래 Mac 설치 안내에서 확인 범위와 실행 절차를 볼 수 있습니다.
 
 ## Swallow로 할 수 있는 일
 
 - **모든 기능 무료:** 가입·구독·결제 정보 없이 시작합니다. 자체 작성 코드와 문서는 [MIT 라이선스](LICENSE)로 공개하며 기능 유료 전환을 하지 않습니다.
-- **내 PC에서 쓰는 AI:** 별도로 준비한 Ollama 로컬 텍스트 모델을 연결해 설명·용어 풀이·답변 피드백·번역 초안을 요청할 수 있습니다. Swallow의 유료 AI 구독이나 외부 AI API 키는 필요하지 않습니다. 새 Mac 베타의 ChatGPT 연결에서는 기존 계정의 허용된 구독 사용량·크레딧을 사용하며, 선택한 원문·질문·답안이 OpenAI로 전송됩니다.
+- **내 PC에서 쓰는 AI:** 별도로 준비한 Ollama 로컬 텍스트 모델을 연결해 설명·용어 풀이·답변 피드백·번역 초안을 요청할 수 있습니다. Swallow의 유료 AI 구독이나 외부 AI API 키는 필요하지 않습니다. Windows·Mac 베타의 ChatGPT 연결에서는 기존 계정의 허용된 구독 사용량·크레딧을 사용하며, 선택한 원문·질문·답안이 OpenAI로 전송됩니다.
 - **읽기에서 회상·복습까지:** 한 구간을 읽고, 내용을 떠올려 내 말로 답하고, 요점노트를 남깁니다. 읽던 위치와 학습 기록을 이어가며 다시 복습할 수 있습니다.
 - **내 자료를 그대로:** 텍스트·Markdown·공개 웹 문서·PDF를 가져옵니다. PDF 원문 보기와 메모, 한글·영문 스캔 OCR, OS의 로컬 음성 읽기를 제공합니다.
 - **내 기기에 남는 기록:** 원문·답변·노트·PDF를 로컬에 저장합니다. 폴더와 검색으로 자료를 정리하고, AI가 연결되지 않아도 읽기·답변·노트·복습을 이어갑니다.
@@ -31,10 +31,10 @@ Swallow는 원문을 작은 부분부터 읽고, 내 말로 답하고, 요점노
 
 Ollama 모델을 선택한 AI 요청은 **같은 기기의 Ollama 서버**로 보냅니다. cloud·원격·확인 불가 모델은 차단하며 실패해도 유료 API로 자동 전환하지 않습니다. Ollama의 외부 전송 설정·서버 로그와 모델 이용 조건은 별도로 확인해야 합니다. 모델 다운로드와 공개 웹 문서 가져오기에는 인터넷이 필요하고, 추론 속도와 메모리 사용량은 PC·모델에 따라 달라집니다. AI·OCR 결과는 원문과 대조하세요. 저장 자료는 앱 자체에서 암호화하지 않으므로 [개인정보·백업 안내](PRIVACY.md)를 참고하세요.
 
-### ChatGPT 구독으로 AI 사용하기 — 새 Mac 베타
+### ChatGPT 구독으로 AI 사용하기 — Windows·Mac 베타
 
 1. **AI 연결 → ChatGPT 구독 연결 · 베타**에서 외부 전송·사용량·계정 제한 안내에 동의합니다.
-2. **Continue with ChatGPT**를 눌러 OpenAI 공식 페이지에서 로그인하고 구독 사용을 허용합니다. Mac 키체인 창은 앱 이름을 확인하고 직접 처리하세요.
+2. **Continue with ChatGPT**를 눌러 OpenAI 공식 페이지에서 로그인하고 구독 사용을 허용합니다. OS 보안 확인 창은 앱 이름을 확인하고 직접 처리하세요. Windows에서는 계정 보호(DPAPI), Mac에서는 키체인을 사용합니다.
 3. 학습 화면의 모델 설정에서 **· ChatGPT** 모델을 선택하고 설명을 요청합니다. 재실행 후에는 **ChatGPT 모델 확인**으로 저장된 연결을 복원합니다.
 
 자격·모델·한도는 OpenAI가 결정하며 기존 구독 허용량 또는 설정에서 허용한 크레딧을 사용할 수 있습니다. 원문·필요한 맥락·질문·답안이 OpenAI로 전송됩니다. **약관 위반·오남용 시 앱 접근 차단 또는 계정 정지·종료가 발생할 수 있습니다.** [연결·사용량·문제 해결 안내](docs/chatgpt-beta.md)를 확인하세요. Gemini·Claude 연결과 웹앱 수동 복사 실행은 제공하지 않습니다.
