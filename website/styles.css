@@ -96,7 +96,10 @@ pre{padding:15px;margin:13px 0;background:#e2e6d9;border-radius:4px;white-space:
 .closing .eyebrow{justify-content:center}
 .closing h2{font-size:clamp(36px,4.1vw,52px);margin-top:18px;line-height:1.5;letter-spacing:-.055em}
 .serif{font-family:"Iowan Old Style",Palatino,serif;letter-spacing:-.04em;font-weight:500}
-.closing .button{margin-top:30px}
+.closing-actions{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:30px}
+.closing-actions .button{min-width:240px}
+.closing-actions .secondary{border:1px solid var(--olive);color:var(--olive)}
+.closing-actions .secondary:hover{background:var(--wash)}
 .feedback-copy{font-size:13px;line-height:1.9;color:var(--muted);margin-top:28px;word-break:keep-all}
 .site-footer{border-top:1px solid var(--line);padding-block:30px 37px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
 .site-footer .wordmark{font-size:26px}
@@ -169,7 +172,8 @@ font-size:13px;margin-top:18px}
 .security-note{padding-left:17px}
 .closing{padding-block:66px}
 .closing h2{font-size:35px}
-.closing .button{margin-top:25px}
+.closing-actions{flex-direction:column;gap:12px;max-width:320px;margin:25px auto 0}
+.closing-actions .button{width:100%;min-width:0}
 .feedback-copy{font-size:12px;margin-top:23px}
 .site-footer{padding-block:24px;gap:12px 19px}
 .site-footer nav{width:100%;margin:0;gap:22px}
