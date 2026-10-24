@@ -1,6 +1,8 @@
-# Windows x64 시험판 실행 안내
+# Windows x64 베타 실행 안내
 
-이 문서는 Windows 11 x64용 ZIP 시험판 후보의 실행 절차입니다. 파일을 만들었다는 사실과 실제 Windows 검증 통과는 다릅니다. 배포받은 파일의 `BUILD-INFO.json`과 해당 빌드의 smoke 결과를 함께 확인하세요. GitHub의 Windows runner는 Windows Server이며, 회사 Windows 11 PC의 실행 정책·오디오 출력까지 검증하지는 않습니다.
+**[Windows 베타 1 다운로드](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0-windows-beta.1)** · Windows 11 / Intel·AMD x64 · 모든 기능 무료 · 회원가입 불필요
+
+이 문서는 Windows용 ZIP 베타의 실행 절차입니다. 공개 베타 1은 앱 버전 `0.1.0`, 소스 `c28bf97`의 검증된 설치본입니다. 재빌드하지 않고 공개해 파일명에는 `trial-unsigned`가 남아 있습니다. Windows CI와 Windows 25H2 x64 장비에서 저장·PDF·한영 음성 제어를 확인했으며 **실제 스피커·헤드폰 청취는 아직 미확인**입니다. 다른 장비·배율·회사 실행 정책까지 보장하지 않습니다. 릴리스의 `BUILD-INFO.json`과 `VERIFICATION-Windows-ko.md`에서 대상과 확인 범위를 볼 수 있습니다.
 
 ## 준비 사항
 
@@ -11,7 +13,7 @@
 
 ## 파일 확인과 실행
 
-1. 전달받은 `Swallow-<버전>-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 둡니다. GitHub Actions에서 받는 경우 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…` artifact**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
+1. [공개 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.0-windows-beta.1)의 **Assets**에서 `Swallow-0.1.0-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 받습니다. `Source code (zip)`은 앱 설치 파일이 아닙니다. 개발자 검증용 GitHub Actions artifact를 받는 경우에는 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…`**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
 2. PowerShell에서 파일명이 일치하는지 확인하고 다음 명령으로 해시를 구합니다. `SHA256SUMS`의 같은 파일명 행과 모든 문자가 같아야 합니다.
 
    ```powershell
