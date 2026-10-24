@@ -9,6 +9,7 @@ import { type LanguagePreferences, resolveLanguagePreferences, validateLanguageP
 import type { LibraryScope } from '../src/shared/types.js';
 import type { AIModel, ProviderId, OllamaEndpoint } from '../src/shared/types.js';
 import type { OllamaProvider } from './ollama.js';
+import type { ChatGPTProvider } from './chatgpt.js';
 import type { AddDocumentInput, AppState, EvidenceReference, ReadingGuide, RecallFeedback, StudyAction, SessionAction, ExplanationStyle, StudySession, StudyDocument, TermNote } from '../src/shared/types.js';
 import { applyStudyAction, createDocument, emptyLibrary, getDocument, getUnit } from '../src/learning/document.js';
 import { requireText } from '../src/learning/guide.js';
@@ -27,6 +28,7 @@ export class AppService {
   private readonly translator: SourceTranslator;
   private readonly modelProviders = new Map<string, ProviderId>();
   private localOperation = false;
+  private unsubscribeChatGPT?: () => void;
   private readonly listeners = new Set<(state: AppState) => void>();
   private state: AppState = { library: emptyLibrary(), models: [], busy: null, streamText: '', notice: null };
   private startupError: Error | null = null;
@@ -34,13 +36,16 @@ export class AppService {
   private requestGeneration = 0;
   private contextTransitions = 0;
   private studyController: AbortController | null = null;
-  constructor(private readonly store: LibraryStore, private readonly ollama?: Pick<OllamaProvider, 'state' | 'initialize' | 'connect' | 'refresh' | 'disconnect' | 'streamResponse' | 'cancel' | 'dispose'>, private readonly lookupSource: typeof fetchDocumentUrl = fetchDocumentUrl) {
+  constructor(private readonly store: LibraryStore, private readonly ollama?: Pick<OllamaProvider, 'state' | 'initialize' | 'connect' | 'refresh' | 'disconnect' | 'streamResponse' | 'cancel' | 'dispose'>, private readonly lookupSource: typeof fetchDocumentUrl = fetchDocumentUrl, private readonly chatgpt?: Pick<ChatGPTProvider, 'state' | 'initialize' | 'subscribe' | 'signIn' | 'cancelSignIn' | 'refresh' | 'disconnect' | 'acknowledgeFirstUse' | 'streamResponse' | 'cancel' | 'dispose'>) {
     const provider: CoachProvider = { streamResponse: options => {
-      if (!this.ollama || this.modelProviders.get(options.model) !== 'ollama') throw new PublicError('errors.modelUnavailable');
-      return this.ollama.streamResponse(options);
+      const providerId = this.modelProviders.get(options.model);
+      if (providerId === 'chatgpt' && this.chatgpt) return this.chatgpt.streamResponse(options);
+      if (providerId === 'ollama' && this.ollama) return this.ollama.streamResponse(options);
+      throw new PublicError('errors.modelUnavailable');
     } };
     this.coach = new StudyCoach(provider, 180_000);
     this.translator = new SourceTranslator(provider);
+    this.unsubscribeChatGPT = this.chatgpt?.subscribe(() => { this.syncChatGPT(); this.publish(); });
   }
   async initialize(systemLocales: readonly string[] = []) {
     try { this.state.library = await this.store.load(); this.refreshMetadata(); }
@@ -51,6 +56,7 @@ export class AppService {
       this.state.notice = new PublicError('language.saveFailed').message;
     }
     if (this.ollama) { await this.ollama.initialize(); this.syncOllama(); }
+    if (this.chatgpt) { await this.chatgpt.initialize(); this.syncChatGPT(); }
     this.publish();
   }
   async setLanguagePreferences(preferences: LanguagePreferences): Promise<void> {
@@ -276,8 +282,10 @@ export class AppService {
   private requireStudyAI(): string {
     if (this.state.busy || this.contextTransitions) throw new PublicError('public.aiBusy');
     const model = this.state.library.selectedModel;
-    if (!model || this.modelProviders.get(model) !== 'ollama' || !this.state.models.some(value => value.slug === model)) throw new PublicError('errors.modelUnavailable');
-    if (this.localOperation || !this.ollama || this.state.ollama?.status !== 'ready') throw new Error('Ollama 서버를 연결하고 연결 상태를 확인하세요.');
+    if (!model || !this.modelProviders.has(model) || !this.state.models.some(value => value.slug === model)) throw new PublicError('errors.modelUnavailable');
+    if (this.modelProviders.get(model) === 'chatgpt') {
+      if (!this.chatgpt || this.state.chatgpt?.status !== 'ready') throw new PublicError('public.chatgptUnavailable');
+    } else if (this.localOperation || !this.ollama || this.state.ollama?.status !== 'ready') throw new Error('Ollama 서버를 연결하고 연결 상태를 확인하세요.');
     return model;
   }
   private async runStudyAI<K extends 'guide' | 'feedback'>(
@@ -396,14 +404,39 @@ export class AppService {
   private requireSupportedDocument(doc: StudyDocument, _model: string) {
     if (doc.pdf) throw new PublicError('public.localPdf');
   }
-  cancelRequest() { this.requestGeneration++; this.studyController?.abort(); this.coach.cancel(); this.ollama?.cancel(); }
+  cancelRequest() { this.requestGeneration++; this.studyController?.abort(); this.coach.cancel(); this.ollama?.cancel(); this.chatgpt?.cancel(); }
   private replaceModels(provider: ProviderId, models: AIModel[]) {
     this.state.models = this.state.models.filter(model => this.modelProviders.get(model.slug) !== provider);
+    for (const [slug, owner] of this.modelProviders) if (owner === provider) this.modelProviders.delete(slug);
     for (const model of models) {
       if (this.modelProviders.has(model.slug) && this.modelProviders.get(model.slug) !== provider) throw new Error('다른 제공자와 중복되는 모델 ID입니다.');
       this.modelProviders.set(model.slug, provider);
     }
     this.state.models.push(...models);
+  }
+  private syncChatGPT() {
+    if (!this.chatgpt) return;
+    this.state.chatgpt = this.chatgpt.state;
+    this.replaceModels('chatgpt', this.state.chatgpt.models);
+  }
+  private async chatgptOperation(action: () => Promise<void>) {
+    if (!this.chatgpt) throw new PublicError('public.chatgptUnavailable');
+    this.connectionGeneration++; this.cancelRequest();
+    try { await action(); this.state.notice = null; }
+    catch (error) { this.state.notice = safeError(error); throw error; }
+    finally { this.syncChatGPT(); this.publish(); }
+  }
+  connectChatGPT(consent: string, accountId?: string) {
+    if (typeof consent !== 'string' || (accountId !== undefined && (typeof accountId !== 'string' || accountId.length > 100))) throw new PublicError('public.chatgptConsent');
+    return this.chatgptOperation(() => this.chatgpt!.signIn(consent, accountId));
+  }
+  cancelChatGPTSignIn() { this.chatgpt?.cancelSignIn(); }
+  refreshChatGPT() { return this.chatgptOperation(() => this.chatgpt!.refresh()); }
+  disconnectChatGPT() { return this.chatgptOperation(() => this.chatgpt!.disconnect()); }
+  async acknowledgeChatGPT() { await this.chatgpt?.acknowledgeFirstUse(); }
+  refreshModels() {
+    return this.state.library.selectedModel?.startsWith('chatgpt:') || (!this.state.library.selectedModel && this.state.chatgpt?.activeAccountId)
+      ? this.refreshChatGPT() : this.refreshOllama();
   }
   private syncOllama() {
     if (!this.ollama) return;
@@ -425,6 +458,6 @@ export class AppService {
   connectOllama(endpoint: OllamaEndpoint) { return this.ollamaOperation(() => this.ollama!.connect(endpoint)); }
   refreshOllama() { return this.ollamaOperation(() => this.ollama!.refresh()); }
   disconnectOllama() { return this.ollamaOperation(() => this.ollama!.disconnect()); }
-  dispose() { this.cancelRequest(); this.listeners.clear(); this.ollama?.dispose(); this.store.close(); }
+  dispose() { this.cancelRequest(); this.listeners.clear(); this.unsubscribeChatGPT?.(); this.chatgpt?.dispose(); this.ollama?.dispose(); this.store.close(); }
 
 }

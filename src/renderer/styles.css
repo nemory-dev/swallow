@@ -356,3 +356,16 @@ select { width: 100%; font-size: 13px; }
 .folder-dialog h2 { font-size: 17px; }
 .folder-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 @media (max-width: 640px) { .document-row { flex: 0 0 180px; } .document-row .document-item { width: 100%; } .folder-navigation { max-width: 360px; } }
+
+.chatgpt-settings { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.65; }
+.chatgpt-settings details { margin: 12px 0; }
+.chatgpt-risk { border-left: 3px solid #a77532; padding-left: 10px; }
+.chatgpt-consent { display: flex; align-items: flex-start; gap: 9px; margin: 14px 0; }
+.chatgpt-consent input { flex: 0 0 auto; margin-top: 5px; }
+.chatgpt-sign-in { display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: #111; color: #fff; border: 1px solid #111; border-radius: 6px; padding: 11px 14px; font: inherit; cursor: pointer; }
+.chatgpt-sign-in:disabled { opacity: .45; cursor: not-allowed; }
+.chatgpt-settings .account-actions { flex-wrap: wrap; gap: 8px 12px; }
+.chatgpt-settings .chatgpt-sign-in { width: 100%; flex-shrink: 0; white-space: nowrap; }
+.chatgpt-welcome { max-width: 500px; }
+.chatgpt-welcome p { line-height: 1.7; }
+.chatgpt-usage { font-size: 12px; line-height: 1.6; }

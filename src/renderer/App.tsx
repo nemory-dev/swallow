@@ -15,6 +15,7 @@ import { UpdateSettings } from './UpdateSettings.js';
 import { saveAndInstallUpdate } from './update-install.js';
 import { UpdatePreparationContext } from './update-preparation.js';
 import { assertStudyDraftsForUpdate, clearStudyDrafts, StudyFlow } from './StudyFlow.js';
+import { ChatGPTSettings, ChatGPTWelcome, ChatGPTUsage } from './ChatGPTSettings.js';
 import { isOllamaModel, aiUnavailableReason, pdfAIBlocked, modelListed, OLLAMA_PROTOCOL_VERSIONS } from '../shared/ai.js';
 import type { AddDocumentInput, AppState, Rating, PdfImportState, ReadingUnit, StudyDocument, SwallowBridge } from '../shared/types.js';
 
@@ -72,6 +73,7 @@ function AccountPanel({ state, bridge, run, pending, close }: {
     <div className="panel-heading"><h2>{t('account.title')}</h2><button className="icon-button" aria-label={t('account.closePanel')} onClick={close}>×</button></div>
     <p className="account-copy">{t('account.help')}</p>
     {bridge.mode === 'browser' ? <p className="status-note">{t('account.previewHelp')}</p> : <>
+      <ChatGPTSettings state={state} bridge={bridge} run={run} pending={pending} />
       <h3>{t('account.ollamaTitle')}</h3>
       <p className="account-copy">{t('account.ollamaHelp')}</p>
       <div className="connection-status"><span className={`status-dot ${state.ollama?.status === 'ready' ? 'connected' : ''}`} />{state.ollama?.message ? localizeText(state.ollama.message) : t('account.localConnectHelp')}</div>
@@ -251,10 +253,11 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
     <header className="app-header"><div className="wordmark">Swallow<span>{t('app.tagline')}</span></div>
       <div className="header-actions"><LanguageSettings bridge={bridge} resolution={state.language} />{bridge.mode === 'browser' && <span className="preview-label">{t('app.browserPreview')}</span>}
         <UpdateSettings bridge={bridge} blocked={pending || updateBlocked} install={installUpdate} />
-        <button className="account-toggle" aria-expanded={accountOpen} onClick={() => setAccountOpen(open => !open)}><span className={`status-dot ${state.ollama?.status === 'ready' ? 'connected' : ''}`} />{state.ollama?.status === 'ready' ? t('account.ollamaConnected') : t('account.title')}<span className="chevron">⌄</span></button>
+        <button className="account-toggle" aria-expanded={accountOpen} onClick={() => setAccountOpen(open => !open)}><span className={`status-dot ${state.ollama?.status === 'ready' || state.chatgpt?.status === 'ready' ? 'connected' : ''}`} />{t('account.title')}<span className="chevron">⌄</span></button>
       </div>
       {accountOpen && <AccountPanel state={state} bridge={bridge} run={run} pending={pending} close={() => setAccountOpen(false)} />}
     </header>
+    <ChatGPTWelcome state={state} bridge={bridge} run={run} pending={pending} />
 
     {(error || state.notice || draftStore.error) && <div className="notice-bar" role="alert"><div>{error && <p>{localizeText(error)}</p>}{state.notice && state.notice !== error && <p>{localizeText(state.notice)}</p>}{draftStore.error && <p>{errorMessage(new Error(draftStore.error))}</p>}</div>{error && <button className="icon-button" aria-label={t('app.closeError')} onClick={() => setError(null)}>×</button>}</div>}
 
@@ -307,7 +310,7 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
         <aside className="learning-pane" aria-label={t('study.guideRegion')}>
           <section className="model-control"><label htmlFor="model-select">{t('model.label')}</label><div className="model-select-row"><select id="model-select" value={modelValid ? state.library.selectedModel ?? '' : ''} disabled={pending || !!state.busy || !state.models.length} onChange={event => run(() => bridge.study({ type: 'select-model', model: event.target.value }))}>
             {!modelValid && <option value="" disabled>{state.library.selectedModel ? t('model.unavailable', { model: state.library.selectedModel }) : t('model.choose')}</option>}{state.models.map(model => <option key={model.slug} value={model.slug}>{modelDisplayName(model)}</option>)}
-          </select><button className="icon-button refresh-button" title={t('model.refreshAccount')} aria-label={t('model.refresh')} disabled={bridge.mode === 'browser' || pending || !!state.busy} onClick={() => run(() => bridge.refreshOllama())}>↻</button></div>{aiDisabledReason && <p className="model-explanation">{aiDisabledReason}{bridge.mode === 'desktop' && <button className="text-button" onClick={() => setAccountOpen(true)}>{t('account.openSettings')}</button>}</p>}</section>
+          </select><button className="icon-button refresh-button" title={t('model.refreshAccount')} aria-label={t('model.refresh')} disabled={bridge.mode === 'browser' || pending || !!state.busy} onClick={() => run(() => bridge.refreshModels())}>↻</button></div><ChatGPTUsage state={state} bridge={bridge} run={run} />{aiDisabledReason && <p className="model-explanation">{aiDisabledReason}{bridge.mode === 'desktop' && <button className="text-button" onClick={() => setAccountOpen(true)}>{t('account.openSettings')}</button>}</p>}</section>
 
           {state.busy && (!activeBusy || (hiddenSource && state.busy.kind === 'translation')) && <div className="other-request">{t('reading.otherRequest', { kind: state.busy.kind === 'translation' ? t('translation.title') : state.busy.kind === 'guide' ? t('model.guide') : t('model.feedback') })}<button className="text-button" onClick={() => { void bridge.cancelRequest().catch(cause => setError(errorMessage(cause))); }}>{t('study.cancelRequest')}</button></div>}
           <section className="guide-section">{activeDocument.pdf && <p className="small-copy">{t('study.pdfUnsupported')}</p>}<div className="section-heading"><h2><span>01</span> {t('reading.understand')}</h2><button className="text-button" disabled={!aiAvailable || !!state.busy || pending} onClick={() => launch(() => bridge.requestGuide(activeDocument.id, unit.id))}>{currentModelGuide ? t('study.recheckGuide') : guide ? t('model.guideSelected') : t('model.getGuide')}</button></div>

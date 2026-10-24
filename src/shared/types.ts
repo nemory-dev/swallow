@@ -1,7 +1,7 @@
 import type { AppLanguage, LanguagePreferences, LanguageResolution } from './i18n.js';
 export type { LanguagePreferences, LanguageResolution } from './i18n.js';
-// Runtime requests use only the local provider. Historical AI provenance is preserved below.
-export type ProviderId = 'ollama';
+// Runtime providers are explicit; historical AI provenance remains readable.
+export type ProviderId = 'ollama' | 'chatgpt';
 export type ResponseLanguage = AppLanguage;
 export interface ModelCapabilities {
   text: 'supported' | 'unsupported' | 'unknown'; vision: 'supported' | 'unsupported' | 'unknown';
@@ -127,6 +127,7 @@ export interface AppState {
   language?: LanguageResolution;
   folders?: LearningFolder[];
   ollama?: OllamaState;
+  chatgpt?: import('./chatgpt.js').ChatGPTState;
   documents?: DocumentSummary[];
   dueReviews?: DueReview[];
   storage?: StorageInfo;
@@ -200,6 +201,13 @@ export interface SwallowBridge {
   requestGuide(documentId: string, unitId: string): Promise<void>;
   requestFeedback(documentId: string, unitId: string): Promise<void>;
   cancelRequest(): Promise<void>;
+  connectChatGPT(consent: string, accountId?: string): Promise<void>;
+  cancelChatGPTSignIn(): Promise<void>;
+  refreshChatGPT(): Promise<void>;
+  disconnectChatGPT(): Promise<void>;
+  acknowledgeChatGPT(): Promise<void>;
+  openChatGPTUsage(): Promise<void>;
+  refreshModels(): Promise<void>;
   connectOllama(endpoint: OllamaEndpoint): Promise<void>;
   refreshOllama(): Promise<void>;
   disconnectOllama(): Promise<void>;

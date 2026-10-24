@@ -6,14 +6,14 @@ import { fileURLToPath } from 'node:url';
 const rootFiles = ['package.json', 'package-lock.json', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'PRIVACY.md',
   'THIRD_PARTY_NOTICES.md', 'tsconfig.json', 'tsconfig.electron.json', 'vite.config.ts', 'vitest.config.ts', 'index.html', '.nvmrc', '.gitignore', '.gitattributes'];
 const sourceDirectories = ['src', 'electron', 'native', 'scripts', 'tests'];
-const publicExtras = ['docs/windows-preview.md', '.github/workflows/windows-preview.yml'];
+const publicExtras = ['src/renderer/assets/chatgpt-logo-white.svg', 'docs/chatgpt-beta.md', 'docs/windows-preview.md', '.github/workflows/windows-preview.yml'];
 const nativeSources = ['native/windows/speech.cs'];
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.css', '.swift', '.py', '.md']);
 const pdfFixtures = new Set(['diagram.pdf', 'encrypted.pdf', 'long.pdf', 'scan.pdf', 'too-many-pages.pdf', 'owner-encrypted.pdf', 'rotated.pdf', 'blank.pdf']);
 const excludedSource = ['vendor/siwc', 'electron/gemini.ts', 'electron/credential-encryption.ts', 'tests/gemini.test.ts',
   'tests/gemini-service.test.ts', 'tests/credential-encryption.test.ts', 'scripts/test-gemini-ui.mjs'];
 const blockedPath = /(?:^|\/)(?:\.git|\.aws|\.ssh|chatgpt|userData|user-data|backups|node_modules|dist|dist-electron|coverage)(?:\/|$)|(?:^|\/)(?:token|credentials?|auth)\.json$|\.(?:sqlite|sqlite3|db|p12|pfx|pem|key|keystore|jks)(?:-wal|-shm)?$/i;
-const subscriptionPackage = name => /^@siwc\//.test(name) || ['openai', 'jose', 'proper-lockfile'].includes(name);
+const subscriptionPackage = name => /^@siwc\//.test(name) || ['openai', 'proper-lockfile'].includes(name);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /** Inspect an explicit source allowlist. Never traverse userData, credentials or Git objects. */
@@ -25,6 +25,7 @@ export async function inspectPublicSource(root = process.cwd()) {
     let info;
     try { info = await lstat(join(root, path)); }
     catch (error) { if (error.code === 'ENOENT') { if (required) issue('missing-file', path); return; } throw error; }
+    if (files.some(file => file.path === path)) return;
     if (info.isSymbolicLink()) { issue('symlink', path); return; }
     if (blockedPath.test(path)) { issue('unexpected-file', path); return; }
     if (info.isDirectory()) {
@@ -45,7 +46,7 @@ export async function inspectPublicSource(root = process.cwd()) {
     if (text.includes('\0')) issue('unexpected-binary', path);
     if (/\b(?:ghp_[A-Za-z0-9]{36,}|sk-(?:proj-)?[A-Za-z0-9_-]{32,})\b|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text)) issue('sensitive-pattern', path);
     if (/^(?:src|electron)\//.test(path)) {
-      if (/['"]@siwc\/|['"](?:openai|jose|proper-lockfile)['"]/.test(text)) issue('subscription-import', path);
+      if (/['"]@siwc\/|['"](?:openai|proper-lockfile)['"]/.test(text)) issue('subscription-import', path);
       if (/(?:invoke(?:<[^>]+>)?|registerHandler)\(\s*['"](?:sign-in|cancel-sign-in|disconnect|select-profile|refresh-models|open-usage|gemini:)/.test(text)) issue('subscription-ipc', path);
     }
     if (path === 'package.json' || path === 'package-lock.json') {

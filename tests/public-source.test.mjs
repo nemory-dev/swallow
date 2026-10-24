@@ -24,7 +24,7 @@ async function fixture() {
   for (const [name, body] of Object.entries(files)) await writeFile(join(root, name), body);
   return root;
 }
-describe('구독 없는 공개 소스 검사와 내보내기', () => {
+describe('검토된 공개 소스 검사와 내보내기', () => {
   it('Windows helper·안내·workflow만 추가 공개하고 내부 docs는 제외한다', async () => {
     const { inspectPublicSource } = await import('../scripts/prepare-public-source.mjs');
     const root = await fixture();
@@ -38,7 +38,7 @@ describe('구독 없는 공개 소스 검사와 내보내기', () => {
     expect(result.files.map(file => file.path)).toEqual(expect.arrayContaining(['native/windows/speech.cs', 'docs/windows-preview.md', '.github/workflows/windows-preview.yml']));
     expect(result.files.some(file => file.path.startsWith('docs/release/') || file.path.startsWith('docs/superpowers/'))).toBe(false);
   });
-  it('현재 앱의 source·lock·빌드에서 구독 SDK를 실제 제외해야 한다', async () => {
+  it('현재 앱에서 과거 수정 SDK·미승인 구독 wrapper는 계속 제외한다', async () => {
     const { inspectPublicSource } = await import('../scripts/prepare-public-source.mjs');
     const result = await inspectPublicSource(process.cwd());
     expect(result.issues.filter(issue => ['subscription-dependency', 'subscription-source', 'subscription-import', 'subscription-ipc'].includes(issue.code))).toEqual([]);

@@ -1,6 +1,6 @@
 import type { LibraryScope } from '../src/shared/types.js';
 import { validateFolderId } from '../src/learning/folders.js';
-import { app, autoUpdater, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, net, protocol, shell, safeStorage } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, basename, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,6 +11,8 @@ import { AppService } from './app-service.js';
 import { toPublicError, localizeText, errorText, PublicError } from '../src/shared/public-errors.js';
 import { translate, type AppLanguage } from '../src/shared/i18n.js';
 import { OllamaProvider } from './ollama.js';
+import { ChatGPTProvider } from './chatgpt.js';
+import { CHATGPT_USAGE_URL } from '../src/shared/chatgpt.js';
 import { NativeSpeech, installedVoices } from './speech.js';
 import { WindowsSpeech, installedWindowsVoices } from './windows-speech.js';
 import { PdfStore } from './pdf.js';
@@ -109,7 +111,11 @@ else {
         return await net.fetch(pathToFileURL(path).href);
       } catch { return new Response('Not found', { status: 404 }); }
     });
-    service = new AppService(new LibraryStore(join(app.getPath('userData'), 'library.json')), new OllamaProvider(join(app.getPath('userData'), 'ollama.json')));
+    service = new AppService(new LibraryStore(join(app.getPath('userData'), 'library.json')), new OllamaProvider(join(app.getPath('userData'), 'ollama.json')), undefined, new ChatGPTProvider({
+      directory: join(app.getPath('userData'), 'subscription-v1'), openExternal: url => shell.openExternal(url),
+      protection: { available: async () => ['darwin', 'win32'].includes(process.platform) && await safeStorage.isAsyncEncryptionAvailable(),
+        encrypt: text => safeStorage.encryptStringAsync(text), decrypt: async bytes => (await safeStorage.decryptStringAsync(bytes)).result },
+    }));
     service.subscribe(state => { if (window && !window.isDestroyed()) window.webContents.send('swallow:state', state); });
     let updateConfiguration: unknown;
     let updateConfigurationError = false;
@@ -145,6 +151,13 @@ else {
     registerHandler('translate-document', (id, language, scope, unitId) => service.translateDocument(id as string,
       language as import('../src/shared/types.js').ResponseLanguage, scope as import('../src/shared/types.js').TranslationScope, unitId as string | undefined));
     registerHandler('set-language-preferences', preferences => service.setLanguagePreferences(preferences as import('../src/shared/i18n.js').LanguagePreferences));
+    registerHandler('chatgpt:connect', (consent, accountId) => service.connectChatGPT(consent as string, accountId as string | undefined));
+    registerHandler('chatgpt:cancel-sign-in', () => service.cancelChatGPTSignIn());
+    registerHandler('chatgpt:refresh', () => service.refreshChatGPT());
+    registerHandler('chatgpt:disconnect', () => service.disconnectChatGPT());
+    registerHandler('chatgpt:acknowledge', () => service.acknowledgeChatGPT());
+    registerHandler('chatgpt:usage', () => shell.openExternal(CHATGPT_USAGE_URL));
+    registerHandler('ai:refresh-models', () => service.refreshModels());
     registerHandler('ollama:connect', endpoint => service.connectOllama(endpoint as import('../src/shared/types.js').OllamaEndpoint));
     registerHandler('ollama:refresh', () => service.refreshOllama());
     registerHandler('ollama:disconnect', () => service.disconnectOllama());

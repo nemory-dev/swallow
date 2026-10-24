@@ -2,7 +2,13 @@
 
 Swallow 자체 작성 코드와 문서는 MIT 라이선스를 따릅니다. 아래 외부 구성요소의 원문 라이선스와 고지는 각 구성요소에 적용되며 앱 라이선스로 변경되지 않습니다.
 
-범위: 현재 package-lock.json의 설치된 npm runtime 의존성. 구독 SDK·브랜드·모델 가중치는 포함하지 않습니다. 향후 설치본 배포 시 정확한 Electron/Chromium 배포물의 LICENSE와 LICENSES.chromium.html 및 추가 파일의 고지를 별도로 포함해야 합니다.
+범위: 현재 package-lock.json의 설치된 npm runtime 의존성. 구독 SDK·모델 가중치는 포함하지 않습니다. 공식 로그인 버튼의 브랜드 자산은 아래 별도 고지를 따릅니다. 향후 설치본 배포 시 정확한 Electron/Chromium 배포물의 LICENSE와 LICENSES.chromium.html 및 추가 파일의 고지를 별도로 포함해야 합니다.
+
+## ChatGPT 로그인 브랜드 자산
+
+`src/renderer/assets/chatgpt-logo-white.svg`는 [OpenAI 공식 로그인 버튼 자산](https://developers.openai.com/assets/siwc/sign-in-buttons/chatgpt-logo-white.svg)을 수정 없이 사용합니다(2026-10-24 확인). OpenAI/ChatGPT 상표 및 로고의 권리는 OpenAI에 있으며 Swallow의 MIT 라이선스에 포함되지 않습니다. [공식 로그인 UI 지침](https://developers.openai.com/siwc/website)과 [연결 약관](https://openai.com/policies/sign-in-with-chatgpt-terms/)에 따라 연결 버튼에 표시하며 OpenAI의 보증을 뜻하지 않습니다.
+
+## npm runtime 의존성
 
 | Package | Version | Declared license |
 | --- | --- | --- |
@@ -24,6 +30,7 @@ Swallow 자체 작성 코드와 문서는 MIT 라이선스를 따릅니다. 아�
 | html-escaper | 3.0.3 | MIT |
 | htmlparser2 | 10.1.0 | MIT |
 | ipaddr.js | 2.5.0 | MIT |
+| jose | 6.2.13 | MIT |
 | linkedom | 0.18.13 | ISC |
 | nth-check | 3.0.1 | BSD-2-Clause |
 | react | 19.3.0 | MIT |
@@ -532,3 +539,31 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
 OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
+
+## jose 6.2.13
+
+JWT/JWKS 검증을 위한 독립 라이브러리입니다. SIWC DevKit은 포함하지 않습니다. 원문: `node_modules/jose/LICENSE.md`.
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2018 Filip Skokan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

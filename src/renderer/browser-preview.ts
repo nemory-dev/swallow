@@ -315,6 +315,8 @@ export function createBrowserPreview(): SwallowBridge {
     },
     requestGuide: desktopOnly, requestFeedback: desktopOnly,
     async cancelRequest() {},
+    connectChatGPT: desktopOnly, cancelChatGPTSignIn: desktopOnly, refreshChatGPT: desktopOnly, disconnectChatGPT: desktopOnly,
+    acknowledgeChatGPT: desktopOnly, openChatGPTUsage: desktopOnly, refreshModels: desktopOnly,
     connectOllama: desktopOnly, refreshOllama: desktopOnly, disconnectOllama: desktopOnly,
   };
   return bridge;
