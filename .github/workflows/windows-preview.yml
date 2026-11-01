@@ -33,7 +33,7 @@ jobs:
       - name: Set up Node 24 x64
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '24'
+          node-version: '24.22.1'
           architecture: x64
       - name: Install locked dependencies
         run: npm ci
@@ -73,7 +73,7 @@ jobs:
       - name: Set up test-tool Node 24 x64
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '24'
+          node-version: '24.22.1'
           architecture: x64
       - name: Download the app archive and hashes
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
