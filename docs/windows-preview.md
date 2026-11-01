@@ -1,8 +1,8 @@
 # Windows x64 베타 실행 안내
 
-**[Windows ChatGPT 베타 다운로드](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)** · Windows 11 / Intel·AMD x64 · 모든 기능 무료 · 회원가입 불필요
+**[Windows ChatGPT 베타 다운로드](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-windows-beta.1)** · Windows 11 / Intel·AMD x64 · 모든 기능 무료 · 회원가입 불필요
 
-이 문서는 앱 버전 `0.1.1-beta.1`의 Windows x64 ZIP 베타 실행 절차입니다. ChatGPT 공식 구독 연결을 포함하며 파일명에는 기존 패키징 표기인 `trial-unsigned`가 남아 있습니다. 정확한 소스 commit은 릴리스의 `BUILD-INFO.json`, Windows CI 및 합성 인증 시험 범위는 `VERIFICATION-Windows-ko.md`를 확인하세요. **이 버전의 실제 Windows PC·ChatGPT 계정 로그인·스피커/헤드폰 청취는 미확인**입니다. 이전 `0.1.0`의 Windows 25H2 장비 결과를 새 버전의 통과로 계산하지 않습니다. 다른 장비·배율·회사 실행 정책까지 보장하지 않습니다.
+이 문서는 앱 버전 `0.1.2-beta.1`의 Windows x64 ZIP 베타 실행 절차입니다. ChatGPT 공식 구독 연결을 포함하며 파일명에는 기존 패키징 표기인 `trial-unsigned`가 남아 있습니다. 정확한 소스 commit은 릴리스의 `BUILD-INFO.json`, Windows CI 및 합성 인증 시험 범위는 `VERIFICATION-Windows-ko.md`를 확인하세요. **이 버전의 실제 Windows PC·ChatGPT 계정 로그인·스피커/헤드폰 청취는 미확인**입니다. 이전 `0.1.0`의 Windows 25H2 장비 결과를 새 버전의 통과로 계산하지 않습니다. 다른 장비·배율·회사 실행 정책까지 보장하지 않습니다.
 
 ## 준비 사항
 
@@ -13,11 +13,11 @@
 
 ## 파일 확인과 실행
 
-1. [공개 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)의 **Assets**에서 `Swallow-0.1.1-beta.1-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 받습니다. `Source code (zip)`은 앱 설치 파일이 아닙니다. 개발자 검증용 GitHub Actions artifact를 받는 경우에는 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…`**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
+1. [공개 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-windows-beta.1)의 **Assets**에서 `Swallow-0.1.2-beta.1-windows-x64-trial-unsigned.zip`, `SHA256SUMS`, `BUILD-INFO.json`을 같은 폴더에 받습니다. `Source code (zip)`은 앱 설치 파일이 아닙니다. 개발자 검증용 GitHub Actions artifact를 받는 경우에는 **전체 workflow가 성공한 실행의 `Swallow-windows-x64-trial-…`**를 선택합니다. `windows-preview-build-…`는 중간 검증용이고, `windows-preview-harness-…`는 시험 도구입니다.
 2. PowerShell에서 파일명이 일치하는지 확인하고 다음 명령으로 해시를 구합니다. `SHA256SUMS`의 같은 파일명 행과 모든 문자가 같아야 합니다.
 
    ```powershell
-   Get-FileHash -Algorithm SHA256 .\Swallow-0.1.1-beta.1-windows-x64-trial-unsigned.zip
+   Get-FileHash -Algorithm SHA256 .\Swallow-0.1.2-beta.1-windows-x64-trial-unsigned.zip
    Get-Content .\SHA256SUMS
    ```
 

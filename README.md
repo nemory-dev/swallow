@@ -6,12 +6,12 @@ Swallow는 원문을 작은 부분부터 읽고, 내 말로 답하고, 요점노
 
 | 지금 다운로드 | 지원 기기 | 설치 파일 |
 | --- | --- | --- |
-| **[Windows 베타 0.1.1](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)** | Windows 11 · Intel/AMD x64 | ZIP 전체를 풀고 `Swallow.exe` 실행 |
-| **[Mac 베타 0.1.1](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)** | macOS 15 이상 · Apple Silicon(M1 이후) | DMG를 열고 응용 프로그램 폴더로 복사 |
+| **[Windows 베타 0.1.2](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-windows-beta.1)** | Windows 11 · Intel/AMD x64 | ZIP 전체를 풀고 `Swallow.exe` 실행 |
+| **[Mac 베타 0.1.2](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1)** | macOS 15 이상 · Apple Silicon(M1 이후) | DMG를 열고 응용 프로그램 폴더로 복사 |
 
 설치본 실행에 Node.js·npm·소스 코드는 필요하지 않습니다. **[실제 앱 화면과 설치 안내](https://nemory-dev.github.io/swallow/)**를 먼저 살펴보세요. GitHub의 **Code → Download ZIP**과 릴리스의 **Source code**는 앱 설치 파일이 아닙니다.
 
-**Windows·Mac 베타 `0.1.1-beta.1`은 기존 ChatGPT 구독 연결을 제공합니다.** OpenAI 공식 로그인 후 Swallow 안에서 설명·피드백·번역 초안을 요청할 수 있습니다. 사용법·구독 사용량·계정 제한 위험·검증 범위는 [ChatGPT 베타 안내](docs/chatgpt-beta.md)를 확인하세요.
+**Windows·Mac 베타 `0.1.2-beta.1`은 기존 ChatGPT 구독 연결을 제공합니다.** OpenAI 공식 로그인 후 Swallow 안에서 설명·피드백·번역 초안을 요청할 수 있습니다. 사용법·구독 사용량·계정 제한 위험·검증 범위는 [ChatGPT 베타 안내](docs/chatgpt-beta.md)를 확인하세요.
 
 현재 Windows는 코드 서명 없는 베타, Mac은 Developer ID 서명·Apple 공증 없는 베타이며 자동 업데이트는 제공하지 않습니다. 새 Windows 설치본은 CI의 합성 ChatGPT·OS 암호화·저장/PDF 시험을 통과했습니다. **실제 Windows PC의 ChatGPT 로그인·추론과 스피커·헤드폰 청취는 미확인**입니다. [Windows 안내](docs/windows-preview.md)와 아래 Mac 설치 안내에서 확인 범위와 실행 절차를 볼 수 있습니다.
 
@@ -52,10 +52,10 @@ Ollama 모델을 선택한 AI 요청은 **같은 기기의 Ollama 서버**로 �
 
 대상은 **macOS 15.0 이상 / Apple Silicon(M1 이후 M 시리즈)**입니다. Intel Mac용 설치본은 없습니다. Windows 사용자는 [Windows 베타 안내](docs/windows-preview.md)를 확인하세요. 최소 대상은 15.0으로 설정했으며 실제 확인한 기기는 macOS 15.6.1 / M1 Pro입니다. 다른 기기와 macOS 버전에서의 동작을 보장하지 않습니다. **설치본 실행에는 소스 코드·Node·npm·Xcode가 필요하지 않습니다.** Ollama도 AI 기능을 선택할 때만 필요합니다.
 
-이번 설치본은 로컬 ad-hoc 리소스 무결성·DMG 검사를 통과했습니다. macOS 15.6.1 / M1 Pro에서 실제 ChatGPT 로그인·모델 조회·설명 생성/저장·화면 새로고침 후 복원을 확인했습니다. 한 계정과 선택 모델에서의 확인이며 모든 플랜·기기의 지원을 보장하지 않습니다. 이전 v0.1.0의 Chrome 다운로드·Applications·Gatekeeper 시험을 이번 버전의 새 설치 시험으로 계산하지 않습니다. 자세한 검증 범위는 릴리스의 `VERIFICATION-macOS-ko.md`를 확인하세요.
+이번 보안 패치 설치본은 Electron 44.10.1·내장 Node.js 24.22.1을 포함하며, 검증한 동일 DMG를 재빌드 없이 게시합니다. macOS 15.6.1 / M1 Pro에서 ad-hoc 무결성·DMG 검사, 합성 자료의 학습/PDF/OCR·저장/재실행 복원을 확인했습니다. ChatGPT는 합성 인증·응답과 메모리 보호 대역으로 검증했으며 이번 버전에서 실제 로그인·추론·Keychain 복원은 확인하지 않았습니다. 이전 버전의 실계정 시험을 이번 버전의 결과로 계산하지 않습니다. 자세한 범위는 릴리스의 VERIFICATION-macOS-ko.md, 보안 변경은 [변경 이력](https://github.com/nemory-dev/swallow/blob/main/CHANGELOG.md)을 확인하세요.
 
-1. 이 저장소의 **[v0.1.1-beta.1 Mac 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)**를 엽니다.
-2. **Assets**에서 `Swallow-0.1.1-beta.1-macOS-arm64-unsigned.dmg`를 받습니다. `Source code (zip)`·`Source code (tar.gz)`는 설치본이 아닙니다.
+1. 이 저장소의 **[v0.1.2-beta.1 Mac 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1)**를 엽니다.
+2. **Assets**에서 `Swallow-0.1.2-beta.1-macOS-arm64-unsigned.dmg`를 받습니다. `Source code (zip)`·`Source code (tar.gz)`는 설치본이 아닙니다.
 3. 기존 Swallow가 켜져 있다면 `⌘Q`로 종료합니다. 이미 학습 기록이 있다면 [저장·백업·삭제](#저장백업삭제)에 따라 먼저 백업하세요. 개발 실행과 설치본은 같은 기본 저장 위치를 사용합니다.
 4. DMG를 두 번 클릭하고, 안의 **Swallow.app을 Applications 폴더로 드래그**합니다. 설치 권한을 묻는 경우 본인이 권한을 확인합니다. 기존 앱을 교체할 때에는 앱을 완전히 종료한 뒤 진행하세요.
 5. Finder에서 Swallow 디스크 이미지를 추출한 뒤 **응용 프로그램 → Swallow**를 엽니다. DMG 안에서 계속 실행하지 마세요.
@@ -148,7 +148,7 @@ npm run make:mac:arm64     # 빌드 후 Swallow.app + DMG 생성
 
 생성한 `Swallow.app`을 별도 폴더로 복사해 실행하거나, 로컬 DMG를 열어 `Swallow.app`을 `Applications`로 옮길 수 있습니다. 완성된 앱에는 Electron과 PDF helper가 들어 있으므로 실행할 때 소스 폴더·Node·npm·Xcode·개발 서버가 필요하지 않습니다. Ollama는 AI를 선택적으로 사용할 때만 별도로 준비합니다. 앱을 옮겨도 학습 기록은 [기본 저장 위치](#저장백업삭제)에 남습니다. 개발 앱과 같은 저장 위치를 사용하므로 두 앱을 동시에 열지 말고, 별도 시험에는 절대 경로의 `SWALLOW_DATA_DIR`를 사용하세요.
 
-현재 산출물은 **Developer ID 미서명·Apple 미공증 베타**입니다. 내부 파일이 바뀌지 않았는지 확인하는 인증서 없는 로컬 ad-hoc 서명은 포함합니다. 이는 개발자 신원이나 앱 안전성을 보증하지 않으며, 파일명의 `unsigned`는 Developer ID 서명·공증이 없다는 뜻입니다. 패키징 명령 자체는 GitHub 업로드·릴리스 공개·자동 업데이트 feed 생성을 수행하지 않습니다. 공개 베타 설치본은 [v0.1.0 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)에서 제공합니다. 다운로드한 사본에서는 macOS가 실행을 막을 수 있으므로 [설치와 보안 경고 안내](#mac-dmg로-설치하기)를 먼저 확인하세요. 패키징 절차와 검증 명령은 [기여 안내](CONTRIBUTING.md#macos-패키징-검증)를 참고하세요.
+현재 산출물은 **Developer ID 미서명·Apple 미공증 베타**입니다. 내부 파일이 바뀌지 않았는지 확인하는 인증서 없는 로컬 ad-hoc 서명은 포함합니다. 이는 개발자 신원이나 앱 안전성을 보증하지 않으며, 파일명의 `unsigned`는 Developer ID 서명·공증이 없다는 뜻입니다. 패키징 명령 자체는 GitHub 업로드·릴리스 공개·자동 업데이트 feed 생성을 수행하지 않습니다. 공개 베타 설치본은 [v0.1.2-beta.1 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1)에서 제공합니다. 다운로드한 사본에서는 macOS가 실행을 막을 수 있으므로 [설치와 보안 경고 안내](#mac-dmg로-설치하기)를 먼저 확인하세요. 패키징 절차와 검증 명령은 [기여 안내](CONTRIBUTING.md#macos-패키징-검증)를 참고하세요.
 
 ## 실행이 막힐 때
 

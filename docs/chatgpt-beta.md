@@ -1,6 +1,6 @@
 # ChatGPT 구독 연결 베타
 
-확인일: Mac 2026-10-24, Windows 2026-10-25. 대상: [Mac `v0.1.1-beta.1`](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)·[Windows `v0.1.1-windows-beta.1`](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)(앱 내부 버전 모두 `0.1.1-beta.1`)와 해당 소스. 이전 공개 `0.1.0` 계열 설치본에는 이 기능이 없습니다. 두 플랫폼의 사용자용 배포 단계 명칭은 **베타**이며 서명·공증·지원 기기 확대를 의미하지 않습니다.
+설치본·합성 검증 기준일: 2026-11-01. 대상: [Mac `v0.1.2-beta.1`](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1)·[Windows `v0.1.2-windows-beta.1`](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-windows-beta.1)(앱 내부 버전 모두 `0.1.2-beta.1`)와 해당 소스. 이전 공개 `0.1.0` 계열 설치본에는 이 기능이 없습니다. 두 플랫폼의 사용자용 배포 단계 명칭은 **베타**이며 서명·공증·지원 기기 확대를 의미하지 않습니다.
 
 ## 이번 버전의 연결 범위
 
@@ -14,7 +14,7 @@ Gemini·Claude에 요청문을 복사하고 사용자가 공식 웹앱에서 직
 
 ## 연결과 사용
 
-1. [Windows 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-windows-beta.1)의 ZIP 또는 [Mac 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.1-beta.1)의 DMG를 설치해 엽니다. 소스 실행에는 [README의 개발 환경](../README.md#소스로-실행하기--개발자용)이 필요합니다.
+1. [Windows 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-windows-beta.1)의 ZIP 또는 [Mac 베타 릴리스](https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1)의 DMG를 설치해 엽니다. 소스 실행에는 [README의 개발 환경](../README.md#소스로-실행하기--개발자용)이 필요합니다.
 2. 상단 **AI 연결 → ChatGPT 구독 연결 · 베타**에서 외부 전송·사용량·저장·계정 제한 안내를 읽고 동의합니다.
 3. **Continue with ChatGPT**를 누릅니다. 기본 브라우저의 OpenAI 페이지에서 본인이 로그인하고 구독 사용을 허용합니다. 브라우저에서 동의를 거절하거나 앱의 **로그인 취소**를 누를 수 있습니다.
 4. 처음 연결하면 구독 사용 안내가 표시됩니다. 학습 화면의 **모델 설정**에서 `· ChatGPT` 모델을 직접 선택한 뒤 설명·피드백·번역 초안을 요청합니다. 사용 가능한 모델은 계정별 공식 목록에서 가져옵니다.
@@ -47,7 +47,7 @@ Gemini·Claude에 요청문을 복사하고 사용자가 공식 웹앱에서 직
 
 공식 OAuth PKCE·state·nonce·JWT 서명/issuer/audience/만료/동일 사용자 검사, 발급 client ID와 안정된 host ID 보존, 원자적 암호화 저장, refresh 직렬화, 한도 오류와 취소 처리를 포함합니다. 요청은 공식 `/v1/models` 및 `/v1/responses`만 사용하며 `store:false`·스트리밍 완료 확인을 적용합니다. 인증 오류의 원문·토큰은 UI로 전달하지 않습니다. JWT 검증에는 MIT 라이선스 `jose`를 사용합니다.
 
-합성 OAuth/JWKS/Responses와 별도 임시 데이터로 자동 검증했으며 전체 570개 테스트가 통과했습니다(Windows 전용 7개 제외). 2026-10-24 macOS 15.6.1 / M1 Pro에서 사용자가 직접 로그인·연결 동의·Keychain 허용을 완료한 뒤 모델 조회, GPT-6.1-Sol의 합성 원문 설명 생성·저장, 화면 새로고침 후 복원을 확인했습니다. 실제 응답의 Content-Type 헤더 누락을 처리하도록 수정한 동일 DMG를 배포합니다. Windows `0.1.1-beta.1` 설치본은 [Windows CI](https://github.com/nemory-dev/swallow/actions/runs/40107410476)에서 빌드 후와 소스 없는 별도 VM에서 합성 OAuth/JWKS/Responses·실제 비동기 OS 암호화·취소/거절·한도 오류/복구·설명 저장/프로세스 재시작 복원·합성 철회/로컬 토큰 삭제를 확인했습니다. 이 시험은 실제 OpenAI 로그인·추론 호출이 아닙니다. **새 Windows 버전의 실제 사용자 PC·실계정 연결/추론·물리 음성 청취와 두 플랫폼의 개별 사용량 차감·실제 서버 철회는 미검증입니다.** 한 계정·모델의 성공이 모든 계정 자격·AI 결과 정확성·향후 정책 호환성을 보장하지 않습니다.
+이번 0.1.2-beta.1 보안 패치는 검증된 설치 파일을 재빌드 없이 게시합니다. Mac 자동 테스트 570개 통과(Windows 전용 7개 제외), Windows 563개 통과(Mac 전용 14개 제외)이며 설치본의 Electron 44.10.1·Node.js 24.22.1을 확인했습니다. Mac은 합성 OAuth/JWKS/Responses·별도 임시 자료·메모리 보호 대역으로 연결과 저장/재실행 복원을 검증했고 실제 Keychain은 사용하지 않았습니다. Windows 게시 ZIP은 [CI 41273381887](https://github.com/nemory-dev/swallow/actions/runs/41273381887)의 최종 후보와 같으며, 소스 없는 별도 VM에서 합성 인증·실제 비동기 OS 보호·취소/거절·한도 오류/복구·설명 저장/재시작 복원·합성 철회/로컬 삭제를 확인했습니다. 같은 커밋의 [main CI](https://github.com/nemory-dev/swallow/actions/runs/41274084182)도 성공했습니다. 이번 시험에는 실제 OpenAI 로그인·추론 호출이 없습니다. 이전 0.1.1-beta.1의 2026-10-24 Mac 실계정 시험은 이력이며 이번 설치본의 실계정 검증이 아닙니다. **새 버전의 실제 사용자 기기·실계정 연결/추론·Mac Keychain 복원·물리 음성 청취·개별 사용량 차감·실제 서버 철회는 미검증입니다.** 자세한 범위는 각 릴리스의 검증 문서를 확인하세요.
 
 개발 검증은 Node 24에서 다음 명령을 사용합니다.
 
