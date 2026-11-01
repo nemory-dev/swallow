@@ -1,6 +1,6 @@
 {
   "name": "swallow",
-  "version": "0.1.1-beta.1",
+  "version": "0.1.2-beta.1",
   "private": true,
   "type": "module",
   "description": "원문 읽기부터 회상과 복습까지 이끄는 개인 학습 앱",
