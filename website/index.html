@@ -117,7 +117,7 @@
         <div class="install-content">
           <p class="requirements"><strong>macOS 15 이상 · Apple Silicon</strong><br>M1 이후 M 시리즈용입니다. Intel Mac용 설치본은 없습니다. 실제 확인 환경은 macOS 15.6.1 / M1 Pro입니다.</p>
           <ol class="install-steps">
-            <li><strong>공식 릴리스에서 DMG 받기</strong><p><a href="https://github.com/nemory-dev/swallow/releases/tag/v0.1.2-beta.1">Mac 공식 릴리스</a>의 Assets에서 <code>Swallow-0.1.2-beta.1-macOS-arm64-unsigned.dmg</code>를 받으세요. Source code ZIP은 설치 파일이 아닙니다.</p></li>
+            <li><strong>공식 DMG와 체크섬 받기</strong><p>GitHub에 공개된 설치 파일 <a href="https://github.com/nemory-dev/swallow/releases/download/v0.1.2-beta.1/Swallow-0.1.2-beta.1-macOS-arm64-unsigned.dmg"><code>Swallow-0.1.2-beta.1-macOS-arm64-unsigned.dmg</code></a>와 체크섬 <a href="https://github.com/nemory-dev/swallow/releases/download/v0.1.2-beta.1/SHA256SUMS.txt"><code>SHA256SUMS.txt</code></a>를 같은 폴더에 받으세요.</p></li>
             <li><strong>응용 프로그램 폴더로 복사하기</strong><p>기존 앱을 교체한다면 ⌘Q로 종료하고 기록을 백업하세요. DMG를 열어 Swallow.app을 Applications 폴더로 드래그합니다.</p></li>
             <li><strong>디스크 이미지를 추출하고 실행하기</strong><p>Finder에서 Swallow 디스크 이미지를 추출한 뒤, 응용 프로그램 폴더의 Swallow를 여세요. Node·npm·Xcode는 필요 없습니다.</p></li>
             <li><strong>짧은 예제로 첫 학습 시작하기</strong><p>앱이 열리면 예제 문서로 답변을 적고 요점노트를 저장해 보세요. <a href="#how">첫 학습 순서 보기</a></p></li>
@@ -128,7 +128,7 @@
             <details><summary>“개발자를 확인할 수 없음” 경고가 표시되나요?</summary><div class="details-body"><p>공식 릴리스에서 받은 파일인지 확인하세요. 실행을 허용하려면 경고를 닫은 뒤 <strong>시스템 설정 → 개인정보 보호 및 보안 → 보안 → 그래도 열기</strong>에서 앱 이름이 Swallow인지 확인합니다. 다시 뜨는 창에서도 실행 여부를 직접 판단하세요. 관리되는 Mac에서는 허용이 제한될 수 있습니다.</p><a href="https://support.apple.com/ko-kr/102445">Apple의 공식 앱 보안 안내 ↗</a></div></details>
             <p class="stop-note"><strong>“앱이 손상되었습니다”, “컴퓨터를 손상시킵니다” 또는 악성코드 발견 경고라면 실행을 중단하세요.</strong> 공식 릴리스에서 다시 받고 체크섬을 확인해 주세요. 문제가 계속되면 오류 문구와 macOS 버전을 알려주세요. <a href="#feedback">오류 알려주기</a></p>
           </div>
-          <details class="checksum"><summary>다운로드한 파일 확인하기</summary><div class="details-body"><p>같은 릴리스의 <code>SHA256SUMS.txt</code>도 같은 폴더에 받으세요. 기본 다운로드 폴더를 썼다면 터미널에서 아래 명령을 실행합니다.</p><pre><code>cd ~/Downloads
+          <details class="checksum"><summary>다운로드한 파일 확인하기</summary><div class="details-body"><p>DMG와 <code>SHA256SUMS.txt</code>를 기본 다운로드 폴더에 받았다면 터미널에서 아래 명령을 실행합니다.</p><pre><code>cd ~/Downloads
 shasum -a 256 -c SHA256SUMS.txt</code></pre><p>DMG 파일명 뒤에 <strong>OK</strong>가 나와야 합니다. 파일이 다르면 설치하지 마세요. 체크섬은 파일 일치 확인이며 Apple 공증을 대신하지 않습니다.</p></div></details>
         </div>
       </div>
