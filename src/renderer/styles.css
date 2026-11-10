@@ -298,7 +298,6 @@ select { width: 100%; font-size: 13px; }
 .study-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin: 16px 0; }
 .study-turn { max-width: 760px; }
 .study-turn > p, .study-explanation p { margin-block: 10px; }
-.study-turn .study-next { margin: 12px 0 8px; }
 .study-explanation { margin-top: 24px; padding-block: 20px; border-block: 1px solid var(--line); }
 .study-explanation h3 { color: var(--moss); font-size: 13px; }
 .study-explanation > div { margin-top: 18px; }

@@ -63,6 +63,10 @@ await usingApp(async page => {
   await page.getByRole('heading', { name: '막막하면, 한 부분부터 같이 시작해요.', exact: true }).waitFor();
   await screenshot(page, 'welcome');
   await page.getByRole('button', { name: '짧은 예제 문서로 시작하기 →', exact: true }).click();
+  await page.getByRole('button', { name: 'AI 모델 설정', exact: true }).click();
+  const closeConnection = page.getByRole('button', { name: '연결 패널 닫기', exact: true });
+  await closeConnection.waitFor();
+  await closeConnection.click();
   await page.getByRole('button', { name: '공부 시작', exact: true }).click();
   await page.getByRole('button', { name: '한 가지 질문에 답해보기 →', exact: true }).waitFor();
   const state = await page.evaluate(() => window.swallow.getState());
@@ -180,6 +184,33 @@ await usingApp(async page => {
   await screenshot(page, 'ai-note');
 });
 
+let offlineDocumentId, offlinePosition;
+const offlineWorkspace = page => page.evaluate(id => window.swallow.getStudyWorkspace(id), offlineDocumentId);
+await usingApp(async page => {
+  await page.evaluate(() => window.swallow.addDocument({ title: '원문만 읽기', source: '첫 구간입니다. '.padEnd(420, '가') + '마지막 구간입니다.', goal: '' }));
+  offlineDocumentId = (await page.evaluate(() => window.swallow.getState())).library.activeDocumentId;
+  await page.getByRole('button', { name: '공부 시작', exact: true }).click();
+  await page.locator('.study-original > summary').click();
+  assert.match(await page.locator('.study-source').innerText(), /첫 구간입니다/);
+  const before = await offlineWorkspace(page);
+  const nextPassage = page.getByRole('button', { name: '다음 구간 →', exact: true });
+  await nextPassage.click();
+  await nextPassage.waitFor({ state: 'hidden' });
+  assert.match(await page.locator('.study-source').innerText(), /마지막 구간입니다/);
+  const after = await offlineWorkspace(page);
+  offlinePosition = location(after.session);
+  assert.notEqual(offlinePosition, location(before.session));
+  assert.equal(after.session.step, 'explain');
+  assert.equal(after.session.answer, '');
+  assert.deepEqual(after.notes, []);
+});
+await usingApp(async page => {
+  await page.getByRole('button', { name: '이어하기', exact: true }).click();
+  await page.getByRole('button', { name: '한 가지 질문에 답해보기 →', exact: true }).waitFor();
+  assert.equal(location((await offlineWorkspace(page)).session), offlinePosition);
+  assert.equal(await page.getByRole('button', { name: '다음 구간 →', exact: true }).count(), 0);
+});
+
 const verification = new LibraryStore(join(data, 'library.json'));
 try {
   await verification.load();
@@ -193,6 +224,7 @@ try {
 assert.deepEqual(errors, []);
 console.log('Guided study UI passed: 예제 → 공부 시작 → 질문 → 미저장 초안 재시작 복원 → 용어 로컬검색/추가 → 노트 저장 → 다음 → 이어하기.');
 console.log('Synthetic AI UI passed: 설명·질문·모델·정확한 인용이 노트에 표시되고 재시작 후에도 원문과 답변을 보존합니다. 실제 AI 요청 없음.');
+console.log('Read-only progression passed: 상단 AI 연결 열기, 원문에서 바로 다음 구간 이동, 마지막 버튼 숨김, 재시작 위치 복원.');
 console.log(speechResult);
 console.log('Renderer pageerrors: 0');
 console.log('임시 저장소: ' + data);

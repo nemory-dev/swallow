@@ -34,14 +34,20 @@ describe('읽기 세션', () => {
   it('단계를 건너뛰거나 저장 없이 완료할 수 없고 이전 단계 재열람은 답변을 보존한다', () => {
     const doc = document(); const initial = createStudySession(doc, hash, now);
     expect(() => applySessionAction(doc, initial, { type: 'step', documentId: doc.id, step: 'note' })).toThrow();
-    expect(() => applySessionAction(doc, initial, { type: 'next', documentId: doc.id })).toThrow();
     const check = applySessionAction(doc, initial, { type: 'step', documentId: doc.id, step: 'check' });
     expect(() => applySessionAction(doc, check, { type: 'step', documentId: doc.id, step: 'note' })).toThrow();
+    expect(() => applySessionAction(doc, check, { type: 'next', documentId: doc.id })).toThrow();
     const answer = applySessionAction(doc, check, { type: 'answer', documentId: doc.id, answer: '  실제 답변\n', unknown: false });
     const note = applySessionAction(doc, answer, { type: 'step', documentId: doc.id, step: 'note' });
     expect(() => applySessionAction(doc, note, { type: 'step', documentId: doc.id, step: 'done' })).toThrow();
+    expect(() => applySessionAction(doc, note, { type: 'next', documentId: doc.id })).toThrow();
     expect(applySessionAction(doc, note, { type: 'step', documentId: doc.id, step: 'explain' }).answer).toBe('  실제 답변\n');
     expect(initial.answer).toBe('');
+  });
+  it('원문 단계에서 답변 없이 이동하고 새 구간에는 현재 언어 설정을 적용한다', () => {
+    const doc = document(), session = createStudySession(doc, hash, now, 'ko');
+    const next = applySessionAction(doc, session, { type: 'next', documentId: doc.id }, now, 'en');
+    expect(next).toMatchObject({ unitId: session.unitId, passageIndex: 1, step: 'explain', answer: '', unknown: false, terms: [], responseLanguage: 'en' });
   });
   it('빈 답변과 모름을 구별하고 다음 구간에서 답변·설명·용어를 초기화한다', () => {
     const doc = document(); const session = createStudySession(doc, hash, now);
@@ -84,11 +90,11 @@ describe('읽기 세션', () => {
     const leading = createDocument({ title: '공백 앞부분', source: ' '.repeat(420) + '실제 본문', goal: '' }, { id: 'leading', now });
     expect(createStudySession(leading, hash, now).passageIndex).toBe(1);
     const doc = createDocument({ title: '공백 중간', source: '첫 본문 ' + ' '.repeat(3600) + '마지막 본문', goal: '' }, { id: 'middle', now });
-    const session = { ...createStudySession(doc, hash, now), step: 'done' as const, unknown: true };
+    const session = createStudySession(doc, hash, now);
     const next = applySessionAction(doc, session, { type: 'next', documentId: doc.id });
     expect(next.unitId).toBe(doc.units.at(-1)!.id); expect(studyPassage(doc, next)).toContain('마지막');
     const trailing = createDocument({ title: '공백 끝부분', source: '첫 본문 ' + ' '.repeat(3600), goal: '' }, { id: 'trailing', now });
-    const final = { ...createStudySession(trailing, hash, now), step: 'done' as const, unknown: true };
+    const final = createStudySession(trailing, hash, now);
     expect(applySessionAction(trailing, final, { type: 'next', documentId: trailing.id })).toEqual(final);
   });
   it('용어의 출처 종류에 필요한 근거가 없으면 저장하지 않는다', () => {

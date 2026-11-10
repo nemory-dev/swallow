@@ -85,6 +85,10 @@ function readableLocation(doc: StudyDocument, startUnit: number, startPassage: n
   }
   return undefined;
 }
+export function nextStudyLocation(doc: StudyDocument, session: Pick<StudySession, 'unitId' | 'passageIndex'>): { unitId: string; passageIndex: number } | undefined {
+  const unitIndex = doc.units.findIndex(unit => unit.id === session.unitId);
+  return unitIndex < 0 ? undefined : readableLocation(doc, unitIndex, session.passageIndex + 1);
+}
 export function createStudySession(doc: StudyDocument, sourceHash: string, now = new Date().toISOString(), responseLanguage?: ResponseLanguage): StudySession {
   const unit = doc.units[doc.position];
   if (!unit) throw new Error('현재 읽기 단위를 찾을 수 없습니다.');
@@ -157,9 +161,8 @@ export function applySessionAction(doc: StudyDocument, session: StudySession, ac
       if (next.step === 'done') next.step = 'note';
       break;
     case 'next': {
-      if (next.step !== 'done') throw new Error('노트를 저장한 뒤 다음 구간으로 이동하세요.');
-      const unitIndex = doc.units.findIndex(unit => unit.id === next.unitId);
-      const location = readableLocation(doc, unitIndex, next.passageIndex + 1);
+      if (next.step !== 'explain' && next.step !== 'done') throw new Error('노트를 저장한 뒤 다음 구간으로 이동하세요.');
+      const location = nextStudyLocation(doc, next);
       if (!location) return next;
       return validateStudySession({ documentId: doc.id, sourceHash: next.sourceHash, ...location, step: 'explain', answer: '', unknown: false, terms: [], updatedAt: now,
         ...(nextResponseLanguage === undefined ? {} : { responseLanguage: nextResponseLanguage }) }, doc, next.sourceHash);
