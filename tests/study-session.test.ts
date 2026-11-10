@@ -66,6 +66,19 @@ describe('읽기 세션', () => {
     const final = { ...next, unitId: doc.units.at(-1)!.id, passageIndex: readingPassages(doc.units.at(-1)!.text).length - 1, step: 'done' as const, unknown: true };
     expect(applySessionAction(doc, final, { type: 'next', documentId: doc.id })).toEqual(final);
   });
+  it('원문 단계에서만 이전으로 이동하며 단위 경계와 공백 구간을 건너뛴다', () => {
+    const doc = createDocument({ title: '이전 구간', source: '첫 본문 ' + ' '.repeat(3600) + '마지막 본문', goal: '' }, { id: 'middle', now });
+    const initial = createStudySession(doc, hash, now);
+    const next = applySessionAction(doc, initial, { type: 'next', documentId: doc.id }, now);
+    const previous = { type: 'previous', documentId: doc.id } as const;
+    expect(applySessionAction(doc, initial, previous, now)).toEqual(initial);
+    expect(applySessionAction(doc, next, previous, now)).toEqual(initial);
+    expect(() => applySessionAction(doc, { ...next, step: 'check' }, previous, now)).toThrow();
+    const sameUnit = document();
+    const first = createStudySession(sameUnit, hash, now);
+    const second = applySessionAction(sameUnit, first, { type: 'next', documentId: sameUnit.id }, now);
+    expect(applySessionAction(sameUnit, second, { ...previous, documentId: sameUnit.id }, now)).toEqual(first);
+  });
   it('변조된 문서·해시·구간·답변·용어와 로컬 URL을 거절한다', () => {
     const doc = document(); const session = createStudySession(doc, hash, now);
     for (const patch of [{ documentId: 'other' }, { sourceHash: 'bad' }, { unitId: 'missing' }, { passageIndex: -1 }, { passageIndex: 1000 }, { answer: 'x'.repeat(10001) }, { terms: Array(21).fill({ term: 'a', explanation: 'b', kind: 'ai' }) }]) {

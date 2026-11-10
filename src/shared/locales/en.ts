@@ -155,6 +155,8 @@ export const en = {
   'study.feedbackModel': 'Feedback model · {model}',
   'study.saveNote': 'Save study note',
   'study.next': 'One more passage',
+  'study.previousPassage': '← Previous passage',
+  'study.lastPassage': 'This is the last passage',
   'study.finish': 'Finish for today',
   'study.sourceExcerpt': 'Source excerpt',
   'study.aiNote': 'Saved from an AI explanation',

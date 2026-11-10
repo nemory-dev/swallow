@@ -153,6 +153,8 @@ export const ko = {
   'study.feedbackModel': '피드백 모델 · {model}',
   'study.saveNote': '요점노트 저장',
   'study.next': '한 부분 더',
+  'study.previousPassage': '← 이전 구간',
+  'study.lastPassage': '마지막 구간이에요',
   'study.finish': '오늘은 여기까지',
   'study.sourceExcerpt': '원문 발췌',
   'study.aiNote': 'AI 설명을 바탕으로 저장',

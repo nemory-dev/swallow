@@ -194,8 +194,13 @@ await usingApp(async page => {
   assert.match(await page.locator('.study-source').innerText(), /첫 구간입니다/);
   const before = await offlineWorkspace(page);
   const nextPassage = page.getByRole('button', { name: '다음 구간 →', exact: true });
+  const previousPassage = page.getByRole('button', { name: '← 이전 구간', exact: true });
+  const lastPassage = page.getByText('마지막 구간이에요', { exact: true });
+  assert.equal(await previousPassage.count(), 0);
+  assert.equal(await lastPassage.count(), 0);
   await nextPassage.click();
-  await nextPassage.waitFor({ state: 'hidden' });
+  await lastPassage.waitFor();
+  assert.equal(await nextPassage.count(), 0);
   assert.match(await page.locator('.study-source').innerText(), /마지막 구간입니다/);
   const after = await offlineWorkspace(page);
   offlinePosition = location(after.session);
@@ -203,12 +208,23 @@ await usingApp(async page => {
   assert.equal(after.session.step, 'explain');
   assert.equal(after.session.answer, '');
   assert.deepEqual(after.notes, []);
+  await previousPassage.click();
+  await previousPassage.waitFor({ state: 'hidden' });
+  assert.match(await page.locator('.study-source').innerText(), /첫 구간입니다/);
+  assert.equal(await lastPassage.count(), 0);
+  const returned = await offlineWorkspace(page);
+  assert.equal(location(returned.session), location(before.session));
+  assert.equal(returned.session.step, 'explain');
+  assert.equal(returned.session.answer, '');
+  assert.deepEqual(returned.notes, []);
 });
 await usingApp(async page => {
   await page.getByRole('button', { name: '이어하기', exact: true }).click();
   await page.getByRole('button', { name: '한 가지 질문에 답해보기 →', exact: true }).waitFor();
+  assert.notEqual(location((await offlineWorkspace(page)).session), offlinePosition);
+  await page.getByRole('button', { name: '다음 구간 →', exact: true }).click();
+  await page.getByText('마지막 구간이에요', { exact: true }).waitFor();
   assert.equal(location((await offlineWorkspace(page)).session), offlinePosition);
-  assert.equal(await page.getByRole('button', { name: '다음 구간 →', exact: true }).count(), 0);
 });
 
 const verification = new LibraryStore(join(data, 'library.json'));
@@ -224,7 +240,7 @@ try {
 assert.deepEqual(errors, []);
 console.log('Guided study UI passed: 예제 → 공부 시작 → 질문 → 미저장 초안 재시작 복원 → 용어 로컬검색/추가 → 노트 저장 → 다음 → 이어하기.');
 console.log('Synthetic AI UI passed: 설명·질문·모델·정확한 인용이 노트에 표시되고 재시작 후에도 원문과 답변을 보존합니다. 실제 AI 요청 없음.');
-console.log('Read-only progression passed: 상단 AI 연결 열기, 원문에서 바로 다음 구간 이동, 마지막 버튼 숨김, 재시작 위치 복원.');
+console.log('Read-only progression passed: 상단 AI 연결 열기, 원문에서 답변·노트 저장 없이 앞뒤 이동, 마지막 안내, 재시작 위치 복원.');
 console.log(speechResult);
 console.log('Renderer pageerrors: 0');
 console.log('임시 저장소: ' + data);

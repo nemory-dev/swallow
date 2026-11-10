@@ -116,6 +116,7 @@ export type SessionAction =
   | { type: 'answer'; documentId: string; answer: string; unknown: boolean }
   | { type: 'relearn'; documentId: string; answer: string }
   | { type: 'next'; documentId: string }
+  | { type: 'previous'; documentId: string }
   | { type: 'add-term'; documentId: string; term: TermNote };
 export type ExplanationStyle = 'brief' | 'simple' | 'example' | 'relearn';
 export interface MigrationReport {
