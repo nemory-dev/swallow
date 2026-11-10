@@ -7,6 +7,7 @@ import { AppService } from '../electron/app-service.js';
 import { LibraryStore } from '../electron/library.js';
 import { localProvider } from './helpers/local-provider.js';
 import { pdfSource } from '../src/learning/pdf.js';
+import { studyPassage } from '../src/learning/session.js';
 import type { CoachRequest } from '../src/shared/types.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -121,6 +122,47 @@ describe('원문 번역 서비스와 저장', () => {
     await expect(service.translateDocument(id, 'en', 'unit')).rejects.toMatchObject({ code: 'public.translationNumbers' });
     expect(document()).toEqual(before); expect(service.getStudyWorkspace(id)).toEqual(workspace);
     expect(calls).toHaveLength(0); expect(service.getState().busy).toBeNull();
+  });
+  it('같이 공부하기는 현재 작은 구간만 번역하고 이동·재실행 후에도 구간별 초안을 복원한다', async () => {
+    const source = 'First passage only. '.padEnd(420, 'x') + '1) The bag weighs 5 kg.';
+    const { service, id, document, client, calls, path } = await setup(source);
+    client.streamResponse = async request => {
+      calls.push(request);
+      const payload = JSON.parse((request.input as { content: string }[])[1]!.content);
+      return { text: JSON.stringify({ translation: payload.source.includes('weighs') ? '1) 가방은 7 g입니다.' : '첫 구간의 원문입니다.' }) };
+    };
+    const first = (await service.studySession({ type: 'start', documentId: id })).session!;
+    const translate = (position: typeof first) => service.translateDocument(id, 'ko', 'passage', position.unitId, position.passageIndex);
+    await translate(first);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every(call => !JSON.stringify(call.input).includes('weighs'))).toBe(true);
+    const unitId = first.unitId;
+    const firstDraft = document().passageTranslations?.[unitId]?.[0]?.ko;
+    expect(firstDraft?.sourceText).toBe(studyPassage(document(), first));
+    expect(document().translations).toBeUndefined();
+    const second = (await service.studySession({ type: 'next', documentId: id })).session!;
+    expect(second.unitId).toBe(unitId);
+    await expect(translate(first)).rejects.toMatchObject({ code: 'public.translationContext' });
+    await translate(second);
+    expect(document().passageTranslations?.[unitId]?.[1]?.ko).toMatchObject({
+      sourceText: studyPassage(document(), second), text: expect.stringContaining('7 g'),
+    });
+    const count = calls.length;
+    await translate(second);
+    expect(calls).toHaveLength(count);
+    expect(document().passageTranslations?.[unitId]?.[0]?.ko).toEqual(firstDraft);
+    let reply!: (result: { text: string }) => void;
+    client.streamResponse = () => new Promise(resolve => { reply = resolve; });
+    const pending = service.translateDocument(id, 'en', 'passage', unitId, second.passageIndex);
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'public.translationCancelled' });
+    await service.studySession({ type: 'previous', documentId: id });
+    reply({ text: '{"translation":"The bag weighs 5 kg."}' });
+    await rejected;
+    expect(document().passageTranslations?.[unitId]?.[1]?.en).toBeUndefined();
+    const saved = document();
+    service.dispose();
+    const reopened = new AppService(new LibraryStore(path)); cleanups.push(() => reopened.dispose()); await reopened.initialize();
+    expect(reopened.getState().library.documents[0]).toEqual(saved);
   });
   it('전체 문서는 순차 저장하고 중간 실패 뒤 완료 구간을 재사용해 이어간다', async () => {
     const { service, client, id, document, calls } = await setup('First sentence. '.repeat(130) + '\n\n' + 'Second sentence. '.repeat(130));

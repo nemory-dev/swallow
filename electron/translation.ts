@@ -5,6 +5,7 @@ import { checkOutputLanguage } from './ai-quality.js';
 import { protectTranslationLiterals } from './translation-literals.js';
 
 export const TRANSLATION_REVISION = 5;
+export const PASSAGE_TRANSLATION_REVISION = 6;
 const MAX_PART_LENGTH = 1800;
 // A fully escaped JSON string can require six characters per translated character.
 const MAX_RESPONSE_LENGTH = 12_000;
@@ -58,16 +59,15 @@ function parseResponse(value: unknown): string {
 
 export class SourceTranslator {
   constructor(private readonly provider: CoachProvider, private readonly timeout = 180_000) {}
-  async translate(source: string, language: ResponseLanguage, model: string, signal: AbortSignal): Promise<string> {
+  async translate(source: string, language: ResponseLanguage, model: string, signal: AbortSignal, allowProseNumbers = false): Promise<string> {
     if (language !== 'ko' && language !== 'en' || typeof model !== 'string' || !model.trim() || model.length > 200
       || typeof source !== 'string' || source.length > MAX_TRANSLATION_LENGTH) throw new PublicError('public.translationInvalid');
     if (!source.trim()) throw new PublicError('public.translationEmpty');
     if (signal.aborted) throw new PublicError('public.translationCancelled');
-    const protectedSource = protectTranslationLiterals(source);
+    const protectedSource = protectTranslationLiterals(source, allowProseNumbers);
     if (!protectedSource.prose(protectedSource.text).trim()) return source;
-    // Installed models approved known numeric mistranslations even after source review.
-    // Preserve literals, but do not automatically translate prose containing numeric claims.
-    if (protectedSource.hasProseNumbers) throw new PublicError('public.translationNumbers');
+    if (!allowProseNumbers && protectedSource.hasProseNumbers) throw new PublicError('public.translationNumbers');
+    const instructions = INSTRUCTIONS + (allowProseNumbers ? ' Preserve every numeric value and its unit. Do not convert units.' : '');
     const controller = new AbortController();
     const cancel = () => controller.abort(new PublicError('public.translationCancelled'));
     signal.addEventListener('abort', cancel, { once: true });
@@ -94,7 +94,7 @@ export class SourceTranslator {
               : '\nTarget language: English (en).';
             try {
               const generated = await this.provider.streamResponse({ model, responseLanguage: language,
-                input: [{ role: 'developer', content: INSTRUCTIONS + target },
+                input: [{ role: 'developer', content: instructions + target },
                   { role: 'user', content: JSON.stringify({ source: payload, targetLanguage: language }) }],
                 responseSchema: { type: 'object', properties: { translation: { type: 'string', minLength: 1, maxLength: MAX_PART_LENGTH } }, required: ['translation'], additionalProperties: false },
                 signal: controller.signal, onDelta: delta => {

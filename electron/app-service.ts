@@ -2,7 +2,7 @@ import { sameAIIdentity } from '../src/shared/ai-identity.js';
 import { validateResponseLanguage } from '../src/shared/ai-identity.js';
 import { validateTranslationScope } from '../src/learning/translation.js';
 import { unitPage } from '../src/learning/pdf.js';
-import { SourceTranslator, TRANSLATION_REVISION } from './translation.js';
+import { PASSAGE_TRANSLATION_REVISION, SourceTranslator, TRANSLATION_REVISION } from './translation.js';
 import type { AIResultIdentity, ResponseLanguage, TranslationScope, SourceTranslation, CoachProvider } from '../src/shared/types.js';
 import { errorText, PublicError, localizeText } from '../src/shared/public-errors.js';
 import { type LanguagePreferences, resolveLanguagePreferences, validateLanguagePreferences } from '../src/shared/i18n.js';
@@ -15,7 +15,7 @@ import { applyStudyAction, createDocument, emptyLibrary, getDocument, getUnit } 
 import { requireText } from '../src/learning/guide.js';
 import { LibraryStore } from './library.js';
 import { STUDY_GUIDE_REVISION, STUDY_FEEDBACK_REVISION, StudyCoach, type CoachHint } from './coach.js';
-import { applySessionAction, createStudySession, studyQuestion } from '../src/learning/session.js';
+import { applySessionAction, createStudySession, studyPassage, studyQuestion } from '../src/learning/session.js';
 import { studyInputDocument, termSearchUrl } from './study-input.js';
 import { fetchDocumentUrl } from './document-url.js';
 
@@ -97,20 +97,27 @@ export class AppService {
     this.state.library = await this.store.addDocument(doc, input.folderId);
     this.refreshMetadata(); this.state.notice = null; this.publish();
   }
-  async translateDocument(documentId: string, targetLanguage: ResponseLanguage, scope: TranslationScope, unitId?: string): Promise<void> {
+  async translateDocument(documentId: string, targetLanguage: ResponseLanguage, scope: TranslationScope, unitId?: string, passageIndex?: number): Promise<void> {
     try {
       requireText(documentId, '자료 ID', 200);
       validateResponseLanguage(targetLanguage); validateTranslationScope(scope);
       if (unitId !== undefined) requireText(unitId, '읽기 단위 ID', 200);
+      if (scope === 'passage' ? unitId === undefined || passageIndex === undefined || !Number.isSafeInteger(passageIndex) || passageIndex < 0 : passageIndex !== undefined)
+        throw new PublicError('public.translationInvalid');
     } catch { throw new PublicError('public.translationInvalid'); }
     const doc = structuredClone(getDocument(this.state.library, documentId));
     if (this.state.library.activeDocumentId !== documentId) throw new PublicError('public.translationContext');
+    const session = scope === 'passage' ? this.getStudyWorkspace(documentId).session : null;
+    if (scope === 'passage' && (!session || session.unitId !== unitId || session.passageIndex !== passageIndex))
+      throw new PublicError('public.translationContext');
     if (unitId !== undefined) getUnit(doc, unitId);
     const units = (scope === 'document' ? doc.units : [getUnit(doc, unitId ?? doc.units[doc.position]!.id)])
-      .filter(unit => unit.text.trim() && unitPage(doc, unit)?.method !== 'empty');
+      .map(unit => ({ id: unit.id, text: session ? studyPassage(doc, session) : unit.text, page: unitPage(doc, unit) }))
+      .filter(unit => unit.text.trim() && unit.page?.method !== 'empty');
     if (!units.length) throw new PublicError('public.translationEmpty');
     const model = this.requireStudyAI();
-    const identity = this.resultIdentity(model, targetLanguage, TRANSLATION_REVISION);
+    const revision = session ? PASSAGE_TRANSLATION_REVISION : TRANSLATION_REVISION;
+    const identity = this.resultIdentity(model, targetLanguage, revision);
     const generation = this.connectionGeneration, attempt = this.requestGeneration;
     const controller = new AbortController(); this.studyController = controller;
     const request: NonNullable<AppState['busy']> = { kind: 'translation', documentId, unitId: units[0]!.id,
@@ -118,25 +125,32 @@ export class AppService {
     const ensureCurrent = () => {
       if (controller.signal.aborted) throw new PublicError('public.translationCancelled');
       if (generation !== this.connectionGeneration || attempt !== this.requestGeneration || this.state.library.activeDocumentId !== documentId
-        || this.state.library.selectedModel !== model || !sameAIIdentity(this.resultIdentity(model, targetLanguage, TRANSLATION_REVISION), identity))
+        || this.state.library.selectedModel !== model || !sameAIIdentity(this.resultIdentity(model, targetLanguage, revision), identity))
         throw new PublicError('public.translationContext');
     };
     this.state.busy = request; this.state.notice = null; this.state.streamText = ''; this.publish();
     try {
       for (const unit of units) {
         ensureCurrent(); request.unitId = unit.id;
-        const cached = getDocument(this.state.library, documentId).translations?.[unit.id]?.[targetLanguage];
+        const current = getDocument(this.state.library, documentId);
+        const cached = (session ? current.passageTranslations?.[unit.id]?.[session.passageIndex] : current.translations?.[unit.id])?.[targetLanguage];
         if (!(cached?.sourceText === unit.text && cached.model === model && sameAIIdentity(cached.identity, identity))) {
-          const text = await this.translator.translate(unit.text, targetLanguage, model, controller.signal);
+          const text = await this.translator.translate(unit.text, targetLanguage, model, controller.signal, !!session);
           ensureCurrent();
           const result: SourceTranslation = { sourceText: unit.text, text, targetLanguage, model, identity, createdAt: new Date().toISOString() };
           try {
             await this.update(library => {
               ensureCurrent();
               const target = getDocument(library, documentId);
-              if (library.activeDocumentId !== documentId || library.selectedModel !== model || getUnit(target, unit.id).text !== unit.text)
+              const source = session ? studyPassage(target, session) : getUnit(target, unit.id).text;
+              if (library.activeDocumentId !== documentId || library.selectedModel !== model || source !== unit.text)
                 throw new PublicError('public.translationContext');
-              target.translations = { ...target.translations, [unit.id]: { ...target.translations?.[unit.id], [targetLanguage]: result } };
+              if (session) {
+                const drafts = target.passageTranslations?.[unit.id], index = session.passageIndex;
+                target.passageTranslations = { ...target.passageTranslations, [unit.id]: { ...drafts, [index]: { ...drafts?.[index], [targetLanguage]: result } } };
+              } else {
+                target.translations = { ...target.translations, [unit.id]: { ...target.translations?.[unit.id], [targetLanguage]: result } };
+              }
               return library;
             });
           } catch (error) {

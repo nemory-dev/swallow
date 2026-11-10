@@ -1,11 +1,14 @@
+import { TRANSLATION_LITERALS } from '../src/learning/translation.js';
 import { PublicError } from '../src/shared/public-errors.js';
 
 /** Protect technical spans before chunking, so neither chunk boundaries nor the model can edit them. */
-export function protectTranslationLiterals(source: string) {
+export function protectTranslationLiterals(source: string, allowProseNumbers = false) {
   let prefix = '__SWA_';
   while (source.includes(prefix)) prefix += '_';
   const values: string[] = [];
-  const pattern = /^# PDF \d+쪽$|```[\s\S]*?(?:```|(?![\s\S]))|~~~[\s\S]*?(?:~~~|(?![\s\S]))|`[^`\n]+`|https?:\/\/[^\s<>`]+|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\b[A-Za-z]\w*(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*[ \t]*=[ \t]*[A-Za-z0-9]+(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*|[ \t]*\r?\n[ \t]*|[+−-]?\d+(?:[.,]\d+)*(?:%|²|³)?/gm;
+  const whitespace = /[ \t]*\r?\n[ \t]*/;
+  const numbers = /[+−-]?\d+(?:[.,]\d+)*(?:%|²|³)?/;
+  const pattern = new RegExp([TRANSLATION_LITERALS.source, whitespace.source, ...(allowProseNumbers ? [] : [numbers.source])].join('|'), 'gm');
   const text = source.replace(pattern, value => { const token = `${prefix}${values.length}__`; values.push(value); return token; });
   const tokens = new RegExp(`${prefix}\\d+__`, 'g');
   const matches = (value: string) => value.match(tokens) ?? [];

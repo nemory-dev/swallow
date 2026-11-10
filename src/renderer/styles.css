@@ -118,6 +118,7 @@ select { width: 100%; font-size: 13px; }
 .translation-comparison > div { min-width: 0; }
 .translation-comparison h4 { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
 .translation-comparison p { font-size: 13px; line-height: 1.95; overflow-wrap: anywhere; }
+.translation-numbers { overflow-wrap: anywhere; }
 .translation-metadata { margin-top: 12px; overflow-wrap: anywhere; }
 .translation-empty { margin-top: 18px; }
 .translation-saved { margin-top: 20px; font-size: 12px; }

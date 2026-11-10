@@ -7,7 +7,7 @@ async function invoke<T = void>(method: string, ...args: unknown[]): Promise<T> 
   return result.value as T;
 }
 const bridge: SwallowBridge = {
-  translateDocument: (id, language, scope, unitId) => invoke('translate-document', id, language, scope, unitId),
+  translateDocument: (id, language, scope, unitId, passageIndex) => invoke('translate-document', id, language, scope, unitId, passageIndex),
   setLanguagePreferences: preferences => invoke('set-language-preferences', preferences),
   createFolder: name => invoke('create-folder', name),
   renameFolder: (id, name) => invoke('rename-folder', id, name),

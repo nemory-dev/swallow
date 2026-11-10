@@ -148,8 +148,8 @@ else {
     registerHandler('delete-folder', id => service.deleteFolder(id as string));
     registerHandler('move-document', (id, folderId) => service.moveDocument(id as string, folderId as string | null));
     registerHandler('get-state', () => service.getState());
-    registerHandler('translate-document', (id, language, scope, unitId) => service.translateDocument(id as string,
-      language as import('../src/shared/types.js').ResponseLanguage, scope as import('../src/shared/types.js').TranslationScope, unitId as string | undefined));
+    registerHandler('translate-document', (id, language, scope, unitId, passageIndex) => service.translateDocument(id as string,
+      language as import('../src/shared/types.js').ResponseLanguage, scope as import('../src/shared/types.js').TranslationScope, unitId as string | undefined, passageIndex as number | undefined));
     registerHandler('set-language-preferences', preferences => service.setLanguagePreferences(preferences as import('../src/shared/i18n.js').LanguagePreferences));
     registerHandler('chatgpt:connect', (consent, accountId) => service.connectChatGPT(consent as string, accountId as string | undefined));
     registerHandler('chatgpt:cancel-sign-in', () => service.cancelChatGPTSignIn());
