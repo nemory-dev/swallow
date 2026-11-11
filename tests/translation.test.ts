@@ -15,7 +15,8 @@ const cached = (language: ResponseLanguage = 'ko'): SourceTranslation => ({
 const response = (translation: unknown) => ({ text: JSON.stringify({ translation }) });
 
 describe('번역 저장 계약 검증', () => {
-  it('현재 구간과 전체 범위만 허용한다', () => {
+  it('작은 구간·읽기 단위·전체 자료 범위만 허용한다', () => {
+    expect(validateTranslationScope('passage')).toBe('passage');
     expect(validateTranslationScope('unit')).toBe('unit');
     expect(validateTranslationScope('document')).toBe('document');
     for (const value of [null, undefined, '', 'all', {}, []]) expect(() => validateTranslationScope(value)).toThrow();
@@ -37,6 +38,9 @@ describe('번역 저장 계약 검증', () => {
       { ...cached(), identity: { ...cached().identity, connectionId: '' } },
       { ...cached(), identity: undefined }, { ...cached(), model: ' ' }, { ...cached(), model: 'x'.repeat(201) },
       { ...cached(), text: ' ' }, { ...cached(), text: 'x'.repeat(30_001) },
+      { ...cached(), sentenceEnds: [] },
+      { ...cached(), sentenceEnds: [{ sourceEnd: cached().sourceText.length, textEnd: cached().text.length - 1 }] },
+      { ...cached(), sentenceEnds: [{ sourceEnd: 0, textEnd: cached().text.length }] },
       { ...cached(), createdAt: 'invalid' }, { ...cached(), createdAt: 10 }, null, [],
     ];
     for (const record of invalidRecords) expect(() => validateTranslations({ 'unit-0': { ko: record } }, units)).toThrow();
@@ -53,7 +57,7 @@ describe('원문 번역 엔진', () => {
     let captured: CoachRequest | undefined;
     const translator = new SourceTranslator({ streamResponse: async request => { const checked = qualityReply(request); if (checked) return checked; captured = request; return response(JSON.parse((request.input as {content: string}[])[1]!.content).source); } });
     expect(await translator.translate(source, language, 'fixture', new AbortController().signal)).toBe(source);
-    expect(TRANSLATION_REVISION).toBe(5);
+    expect(TRANSLATION_REVISION).toBe(7);
     expect(captured?.responseLanguage).toBe(language);
     expect(captured?.model).toBe('fixture');
     const messages = captured!.input as Exclude<CoachRequest['input'], string>;
@@ -99,6 +103,26 @@ describe('원문 번역 엔진', () => {
     } });
     expect(await translator.translate(source, 'en', 'fixture', new AbortController().signal)).toBe(source);
     expect(requests).toBeLessThan(readingPassages(source).length);
+  });
+  it('문장 구분 표식이 누락되면 개별 문장 번역으로 대응을 복구한다', async () => {
+    const first = 'Read https://example.com.';
+    const second = 'Next takes 12 ms.';
+    const source = first + ' ' + second;
+    const seen: string[] = [];
+    const translator = new SourceTranslator({ streamResponse: async request => {
+      const payload = JSON.parse((request.input as { content: string }[])[1]!.content).source as string;
+      seen.push(payload);
+      if (seen.length === 1) return response('Missing markers.');
+      return response(payload.replace('12 ms', '12 s'));
+    } });
+    const draft = await translator.translateDraft(source, 'en', 'fixture', new AbortController().signal);
+    expect(draft).toEqual({
+      text: first + ' Next takes 12 s.',
+      sentenceEnds: [{ sourceEnd: first.length + 1, textEnd: first.length + 1 }, { sourceEnd: source.length, textEnd: source.length - 1 }],
+    });
+    expect(seen).toHaveLength(3);
+    expect(seen[1]).not.toContain('Next');
+    expect(seen[2]).toBe(second);
   });
   it('빈 원문·잘못된 언어·빈 모델을 요청 전에 거부한다', async () => {
     const streamResponse = vi.fn(async () => response('translation'));

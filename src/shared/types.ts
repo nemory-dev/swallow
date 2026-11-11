@@ -54,8 +54,10 @@ export interface RecallRecord {
 export interface SourceTranslation {
   sourceText: string; text: string; targetLanguage: ResponseLanguage;
   model: string; identity: AIResultIdentity; createdAt: string;
+  sentenceEnds?: { sourceEnd: number; textEnd: number }[];
 }
-export type TranslationScope = 'unit' | 'document';
+type TranslationDrafts = Partial<Record<ResponseLanguage, SourceTranslation>>;
+export type TranslationScope = 'passage' | 'unit' | 'document';
 export interface StudyDocument {
   id: string; title: string; source: string; goal: string; createdAt: string;
   sourceUrl?: string;
@@ -63,7 +65,8 @@ export interface StudyDocument {
   units: ReadingUnit[]; position: number; readUnitIds: string[];
   guides: Record<string, { model: string; guide: ReadingGuide; revision?: number }>;
   recalls: Record<string, RecallRecord>;
-  translations?: Record<string, Partial<Record<ResponseLanguage, SourceTranslation>>>;
+  translations?: Record<string, TranslationDrafts>;
+  passageTranslations?: Record<string, Record<number, TranslationDrafts>>;
 }
 export interface LibraryState {
   version: 1; documents: StudyDocument[]; activeDocumentId: string | null;
@@ -116,6 +119,7 @@ export type SessionAction =
   | { type: 'answer'; documentId: string; answer: string; unknown: boolean }
   | { type: 'relearn'; documentId: string; answer: string }
   | { type: 'next'; documentId: string }
+  | { type: 'previous'; documentId: string }
   | { type: 'add-term'; documentId: string; term: TermNote };
 export type ExplanationStyle = 'brief' | 'simple' | 'example' | 'relearn';
 export interface MigrationReport {
@@ -158,7 +162,7 @@ export interface UpdateState {
   message: string; checkedAt?: string; releaseName?: string; releaseNotes?: string;
 }
 export interface SwallowBridge {
-  translateDocument(documentId: string, targetLanguage: ResponseLanguage, scope: TranslationScope, unitId?: string): Promise<void>;
+  translateDocument(documentId: string, targetLanguage: ResponseLanguage, scope: TranslationScope, unitId?: string, passageIndex?: number): Promise<void>;
   setLanguagePreferences(preferences: LanguagePreferences): Promise<void>;
   createFolder(name: string): Promise<LearningFolder>;
   renameFolder(folderId: string, name: string): Promise<void>;

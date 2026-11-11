@@ -2,7 +2,7 @@ import type { AddDocumentInput, LibraryState, ReadingUnit, StudyAction, StudyDoc
 import { requireText, validateFeedback, validateGuide } from './guide.js';
 import { splitPdfSource, validatePdf, unitPage } from './pdf.js';
 import { validateSourceUrl } from './reading.js';
-import { validateTranslations } from './translation.js';
+import { validatePassageTranslations, validateTranslations } from './translation.js';
 
 export const MAX_SOURCE_LENGTH = 1_000_000;
 export const MAX_DOCUMENTS = 20;
@@ -144,6 +144,7 @@ export function validateLibrary(raw: unknown): LibraryState {
     const pdf = doc.pdf === undefined ? undefined : validatePdf(doc.pdf, source);
     const expected = pdf ? splitPdfSource(source, pdf.pages) : splitSource(source);
     if (doc.translations !== undefined) validateTranslations(doc.translations, expected);
+    if (doc.passageTranslations !== undefined) validatePassageTranslations(doc.passageTranslations, expected);
     if (JSON.stringify(doc.units) !== JSON.stringify(expected)) throw new Error('저장된 읽기 단위가 원문과 다릅니다.');
     if (!Number.isInteger(doc.position) || (doc.position as number) < 0 || (doc.position as number) >= expected.length) throw new Error('저장된 읽기 위치가 잘못되었습니다.');
     const unitIds = new Set(expected.map(unit => unit.id));

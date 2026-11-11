@@ -48,14 +48,17 @@ try {
   await page.getByRole('button', { name: '로컬 서버 연결', exact: true }).click();
   await page.waitForFunction(() => window.swallow.getState().then(state => state.ollama?.status === 'ready'));
   await page.getByRole('button', { name: '연결 패널 닫기', exact: true }).click();
-  await page.getByRole('button', { name: '짧은 예제 문서로 시작하기 →', exact: true }).click();
-  await page.locator('.study-model-settings > summary').click();
+  await page.evaluate(() => window.swallow.addDocument({ title: '로컬 AI 학습', source: '로컬 AI 테스트용 원문입니다. '.repeat(70), goal: '' }));
+  const modelSetup = page.locator('.study-model-settings > summary').getByText('AI 모델 설정', { exact: true });
+  await modelSetup.click();
+  assert.equal(await page.locator('.account-panel').count(), 0);
   const state = await page.evaluate(() => window.swallow.getState());
   const slug = state.models.find(model => model.providerId === 'ollama').slug;
   assert.equal('session' in state, false);
   assert.equal(await page.evaluate(() => ['signIn', 'connectGemini', 'openUsage'].some(key => key in window.swallow)), false);
   assert.equal(await page.getByRole('button', { name: /ChatGPT|Gemini|Google/ }).count(), 0);
   await page.getByRole('combobox', { name: '학습 모델', exact: true }).selectOption(slug);
+  await modelSetup.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '공부 시작', exact: true }).click();
   await page.getByRole('button', { name: '짧게 설명해줘', exact: true }).click();
   await page.getByText('시험 서버의 로컬 학습 설명입니다.', { exact: true }).waitFor();
@@ -71,6 +74,16 @@ try {
   assert.equal(chats.filter(request => request.body.format.properties.assessment).length, 1);
   assert.equal(chats.filter(request => request.body.format.properties.verdict).length, 1);
   for (const { body } of requests.filter(request => request.path === '/api/chat')) { assert.equal(body.stream, false); assert.equal(body.format.additionalProperties, false); assert.equal(body.truncate, false); }
+  await page.getByRole('button', { name: '한 부분 더', exact: true }).click();
+  await page.getByRole('button', { name: '짧게 설명해줘', exact: true }).click();
+  await page.getByText('시험 서버의 로컬 학습 설명입니다.', { exact: true }).waitFor();
+  const beforeSkip = await page.evaluate(id => window.swallow.getStudyWorkspace(id), state.library.activeDocumentId);
+  await page.getByRole('button', { name: '다음 구간 →', exact: true }).click();
+  await page.locator('.study-explanation').waitFor({ state: 'hidden' });
+  const afterSkip = await page.evaluate(id => window.swallow.getStudyWorkspace(id), state.library.activeDocumentId);
+  assert.notDeepEqual([afterSkip.session.unitId, afterSkip.session.passageIndex], [beforeSkip.session.unitId, beforeSkip.session.passageIndex]);
+  assert.equal(afterSkip.session.answer, '');
+  assert.deepEqual(afterSkip.notes, beforeSkip.notes);
   await app.close(); app = undefined;
   page = await launch();
   const restored = await page.evaluate(() => window.swallow.getState());
@@ -81,6 +94,7 @@ try {
   assert.equal((await page.evaluate(() => window.swallow.getState())).library.selectedModel, slug);
   const workspace = await page.evaluate(async () => { const state = await window.swallow.getState(); return window.swallow.getStudyWorkspace(state.library.activeDocumentId); });
   assert.equal(workspace.notes[0].userAnswer, '작은 부분부터 배웁니다.');
+  assert.deepEqual(workspace.session, afterSkip.session);
   assert.equal(await readFile(join(data, 'chatgpt', 'chatgpt-auth.json'), 'utf8'), 'SYNTHETIC_AUTH_NOT_REAL');
   assert.deepEqual(errors, []);
   console.log('Ollama UI passed: 좁은 IPC 연결 설정, 구독 API 없는 텍스트 설명·피드백·노트, schema 요청, 재시작 주소·선택 보존. 실제 AI·계정 호출 없음.');

@@ -76,14 +76,23 @@ function learningAttempts(value: unknown): LearningAttempt[] {
 function requireAnswer(session: Pick<StudySession, 'answer' | 'unknown'>) {
   if (!session.unknown && !session.answer.trim()) throw new Error('답변을 입력하거나 모름을 선택해 주세요.');
 }
-function readableLocation(doc: StudyDocument, startUnit: number, startPassage: number): { unitId: string; passageIndex: number } | undefined {
-  for (let unitIndex = startUnit; unitIndex < doc.units.length; unitIndex++) {
+function readableLocation(doc: StudyDocument, startUnit: number, startPassage: number, direction: 1 | -1 = 1): { unitId: string; passageIndex: number } | undefined {
+  for (let unitIndex = startUnit; unitIndex >= 0 && unitIndex < doc.units.length; unitIndex += direction) {
     const unit = doc.units[unitIndex]!, passages = readingPassages(unit.text);
-    for (let passageIndex = unitIndex === startUnit ? startPassage : 0; passageIndex < passages.length; passageIndex++) {
+    const start = unitIndex === startUnit ? startPassage : direction === 1 ? 0 : passages.length - 1;
+    for (let passageIndex = start; passageIndex >= 0 && passageIndex < passages.length; passageIndex += direction) {
       if (passages[passageIndex]!.trim()) return { unitId: unit.id, passageIndex };
     }
   }
   return undefined;
+}
+export function nextStudyLocation(doc: StudyDocument, session: Pick<StudySession, 'unitId' | 'passageIndex'>): { unitId: string; passageIndex: number } | undefined {
+  const unitIndex = doc.units.findIndex(unit => unit.id === session.unitId);
+  return unitIndex < 0 ? undefined : readableLocation(doc, unitIndex, session.passageIndex + 1);
+}
+export function previousStudyLocation(doc: StudyDocument, session: Pick<StudySession, 'unitId' | 'passageIndex'>): { unitId: string; passageIndex: number } | undefined {
+  const unitIndex = doc.units.findIndex(unit => unit.id === session.unitId);
+  return readableLocation(doc, unitIndex, session.passageIndex - 1, -1);
 }
 export function createStudySession(doc: StudyDocument, sourceHash: string, now = new Date().toISOString(), responseLanguage?: ResponseLanguage): StudySession {
   const unit = doc.units[doc.position];
@@ -156,10 +165,12 @@ export function applySessionAction(doc: StudyDocument, session: StudySession, ac
       next.terms.push(term(action.term));
       if (next.step === 'done') next.step = 'note';
       break;
+    case 'previous':
     case 'next': {
-      if (next.step !== 'done') throw new Error('노트를 저장한 뒤 다음 구간으로 이동하세요.');
-      const unitIndex = doc.units.findIndex(unit => unit.id === next.unitId);
-      const location = readableLocation(doc, unitIndex, next.passageIndex + 1);
+      if (next.step !== 'explain' && (action.type !== 'next' || next.step !== 'done')) {
+        throw new Error(action.type === 'previous' ? '원문과 설명 단계에서 이전 구간으로 이동하세요.' : '노트를 저장한 뒤 다음 구간으로 이동하세요.');
+      }
+      const location = action.type === 'previous' ? previousStudyLocation(doc, next) : nextStudyLocation(doc, next);
       if (!location) return next;
       return validateStudySession({ documentId: doc.id, sourceHash: next.sourceHash, ...location, step: 'explain', answer: '', unknown: false, terms: [], updatedAt: now,
         ...(nextResponseLanguage === undefined ? {} : { responseLanguage: nextResponseLanguage }) }, doc, next.sourceHash);
