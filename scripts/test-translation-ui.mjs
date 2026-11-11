@@ -63,9 +63,13 @@ const server = createServer(async (req, res) => {
       let released = false;
       const complete = () => { if (!released) { released = true; activeTranslations--; } };
       res.once('finish', complete); res.once('close', complete);
+      const translatedSource = payload.source.replace('FIRST_TAKES 12 ms.', '첫 문장은 15 ms가 걸립니다.')
+        .replace('SECOND_TAKES 15 ms.', '둘째 문장은 12 ms가 걸립니다.')
+        .replace('RATE_IS 30%.', '비율은 알 수 없습니다.')
+        .replace('LIMIT_IS 12 ms.', '제한은 12 s입니다.');
       content = { translation: payload.source.includes('NEXT_PASSAGE')
         ? '1) 가방의 무게는 7 g입니다.'
-        : `${payload.targetLanguage === 'ko' ? '[ko] ' + '한국어번역을검증하는합성결과입니다'.repeat(4) : '[en]'} ${payload.source}` };
+        : `${payload.targetLanguage === 'ko' ? '[ko] ' + '한국어번역을검증하는합성결과입니다'.repeat(4) : '[en]'} ${translatedSource}` };
       if (holdNextTranslation) {
         holdNextTranslation = false;
         await new Promise(resolve => { heldResponse = { release: resolve, attempted: false }; });
@@ -164,8 +168,8 @@ try {
   assert.ok(korean.text.includes('`sum = a + b`')); assert.ok(korean.text.includes('E = mc²'));
   assert.equal(korean.sourceText, firstPassage); assert.equal(korean.targetLanguage, 'ko');
   assert.equal(korean.identity.responseLanguage, 'ko');
-  assert.equal(await panel().locator('.translation-current .translation-comparison p').first().textContent(), firstPassage);
-  assert.equal(await panel().locator('.translation-current p[lang="ko"]').textContent(), korean.text);
+  assert.equal((await panel().locator('.translation-current td:first-child p').allTextContents()).join(''), firstPassage);
+  assert.equal((await panel().locator('.translation-current p[lang="ko"]').allTextContents()).join(''), korean.text);
   assert.equal(await answer.inputValue(), '번역 중에도 유지할 사용자 답변 초안');
 
   await panel().getByRole('combobox', { name: ko('translation.targetLanguage'), exact: true }).selectOption('en');
@@ -260,6 +264,38 @@ try {
   await currentSource.filter({ hasText: 'ONLY_CURRENT_PASSAGE' }).waitFor();
   assert.equal(await panel().locator('.translation-numbers').count(), 0);
 
+  const wholeNumericSource = 'FIRST_TAKES 12 ms. SECOND_TAKES 15 ms. RATE_IS 30%. LIMIT_IS 12 ms.\n\n'
+    + 'Further source material. '.repeat(80) + 'LAST_SECTION.';
+  await preferences('ko', 'ko');
+  await page.evaluate(source => window.swallow.addDocument({ title: 'Whole numeric document', source, goal: '' }), wholeNumericSource);
+  const wholeNumericId = (await state()).library.activeDocumentId;
+  await startStudy();
+  await panel().getByRole('button', { name: ko('translation.document'), exact: true }).click();
+  await waitUntil(async () => {
+    const current = await state(), doc = current.library.documents.find(item => item.id === wholeNumericId);
+    return !current.busy && doc.units.every(unit => doc.translations?.[unit.id]?.ko?.sentenceEnds?.length);
+  }, 'whole document including numeric passages');
+  const numericDocument = await document(wholeNumericId);
+  assert.ok(numericDocument.units.length > 1);
+  assert.match(numericDocument.translations[numericDocument.units.at(-1).id].ko.text, /LAST_SECTION/);
+  const numericUnits = panel().locator('.translation-saved-unit');
+  assert.equal(await numericUnits.locator('tbody tr').count(), 0, 'collapsed units should defer sentence rows');
+  await numericUnits.first().locator('summary').click();
+  const expectedWarnings = [
+    ['FIRST_TAKES', '12 ms', '15 ms'], ['SECOND_TAKES', '15 ms', '12 ms'],
+    ['RATE_IS', '30%', ko('translation.numberMissing')], ['LIMIT_IS', '12 ms', '12 s'],
+  ];
+  for (const [source, original, draft] of expectedWarnings) {
+    const row = numericUnits.first().getByRole('row').filter({ hasText: source });
+    await row.getByText('수치 확인 필요', { exact: true }).waitFor();
+    await row.getByText(ko('translation.numberSource', { values: original }), { exact: true }).waitFor();
+    await row.getByText(ko('translation.numberDraft', { values: draft }), { exact: true }).waitFor();
+  }
+  assert.equal(await numericUnits.first().locator('.translation-numbers').count(), 4);
+  await numericUnits.last().locator('summary').click();
+  await numericUnits.last().getByText(/LAST_SECTION/).first().waitFor();
+  await preferences('en', 'ko');
+
   // PDF whole-document translation uses extraction/OCR text and skips empty pages.
   await page.evaluate(id => window.swallow.study({ type: 'select-document', documentId: id }), pdf.id);
   await startStudy();
@@ -284,7 +320,7 @@ try {
   assert.deepEqual((await document(id)).passageTranslations, persisted.passageTranslations);
   assert.equal((await document(id)).source, source);
   await startStudy();
-  await panel().locator('.translation-current p[lang="ko"]').waitFor();
+  await panel().locator('.translation-current p[lang="ko"]').first().waitFor();
   assert.equal(await panel().getByRole('button', { name: en('translation.current'), exact: true }).isDisabled(), true);
   await panel().locator('.translation-saved > summary').click();
   assert.equal(await panel().locator('.translation-saved-unit').count(), original.units.length);
@@ -297,7 +333,7 @@ try {
   await panel().locator('h3').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(artifacts, 'translation-ui.png') });
   assert.deepEqual(fixtureErrors, []); assert.deepEqual(errors, []);
-  console.log('Translation Electron UI passed: current passage isolation and numeric warnings, ko/en independent storage, source/draft/locale preservation, sequential whole-document progress/cache, cancelled late response, PDF text/OCR/empty-page handling, and disconnected restart reading. No real AI/account calls.');
+  console.log('Translation Electron UI passed: current passage isolation, whole-document continuation, sentence-level numeric omissions/unit changes/swaps, ko/en storage, cancellation, PDF text/OCR/empty-page handling, and disconnected restart reading. No real AI/account calls.');
   console.log('Screenshot: ' + join(artifacts, 'translation-ui.png'));
   console.log('Synthetic data directory: ' + data);
 } catch (error) {

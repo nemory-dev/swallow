@@ -2,7 +2,7 @@ import { sameAIIdentity } from '../src/shared/ai-identity.js';
 import { validateResponseLanguage } from '../src/shared/ai-identity.js';
 import { validateTranslationScope } from '../src/learning/translation.js';
 import { unitPage } from '../src/learning/pdf.js';
-import { PASSAGE_TRANSLATION_REVISION, SourceTranslator, TRANSLATION_REVISION } from './translation.js';
+import { SourceTranslator, TRANSLATION_REVISION } from './translation.js';
 import type { AIResultIdentity, ResponseLanguage, TranslationScope, SourceTranslation, CoachProvider } from '../src/shared/types.js';
 import { errorText, PublicError, localizeText } from '../src/shared/public-errors.js';
 import { type LanguagePreferences, resolveLanguagePreferences, validateLanguagePreferences } from '../src/shared/i18n.js';
@@ -116,8 +116,7 @@ export class AppService {
       .filter(unit => unit.text.trim() && unit.page?.method !== 'empty');
     if (!units.length) throw new PublicError('public.translationEmpty');
     const model = this.requireStudyAI();
-    const revision = session ? PASSAGE_TRANSLATION_REVISION : TRANSLATION_REVISION;
-    const identity = this.resultIdentity(model, targetLanguage, revision);
+    const identity = this.resultIdentity(model, targetLanguage, TRANSLATION_REVISION);
     const generation = this.connectionGeneration, attempt = this.requestGeneration;
     const controller = new AbortController(); this.studyController = controller;
     const request: NonNullable<AppState['busy']> = { kind: 'translation', documentId, unitId: units[0]!.id,
@@ -125,7 +124,7 @@ export class AppService {
     const ensureCurrent = () => {
       if (controller.signal.aborted) throw new PublicError('public.translationCancelled');
       if (generation !== this.connectionGeneration || attempt !== this.requestGeneration || this.state.library.activeDocumentId !== documentId
-        || this.state.library.selectedModel !== model || !sameAIIdentity(this.resultIdentity(model, targetLanguage, revision), identity))
+        || this.state.library.selectedModel !== model || !sameAIIdentity(this.resultIdentity(model, targetLanguage, TRANSLATION_REVISION), identity))
         throw new PublicError('public.translationContext');
     };
     this.state.busy = request; this.state.notice = null; this.state.streamText = ''; this.publish();
@@ -135,9 +134,9 @@ export class AppService {
         const current = getDocument(this.state.library, documentId);
         const cached = (session ? current.passageTranslations?.[unit.id]?.[session.passageIndex] : current.translations?.[unit.id])?.[targetLanguage];
         if (!(cached?.sourceText === unit.text && cached.model === model && sameAIIdentity(cached.identity, identity))) {
-          const text = await this.translator.translate(unit.text, targetLanguage, model, controller.signal, !!session);
+          const draft = await this.translator.translateDraft(unit.text, targetLanguage, model, controller.signal);
           ensureCurrent();
-          const result: SourceTranslation = { sourceText: unit.text, text, targetLanguage, model, identity, createdAt: new Date().toISOString() };
+          const result: SourceTranslation = { ...draft, sourceText: unit.text, targetLanguage, model, identity, createdAt: new Date().toISOString() };
           try {
             await this.update(library => {
               ensureCurrent();

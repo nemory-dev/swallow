@@ -145,22 +145,25 @@ describe('실제 모델에서 발견한 번역 품질 회귀', () => {
     expect(await translator.translate('It may become stale.', 'ko', 'fixture', new AbortController().signal)).toBe('시각적으로 오버해질 수 있습니다.');
     expect(calls).toBe(1);
   });
-  it.each(['잔액 100에서 30을 출금하면 70입니다.', 'Keep -42 and +7.5% unchanged.', 'Balance １００ minus ３０ is ７０.'])('수치 관계를 보증할 수 없는 일반 문장은 추론·저장 전에 차단한다 (%s)', async source => {
+  it.each(['잔액 100에서 30을 출금하면 70입니다.', 'Keep -42 and +7.5% unchanged.', 'Balance １００ minus ３０ is ７０.'])('일반 문장의 수치 표현을 모델에 전달하고 검토 전 초안을 반환한다 (%s)', async source => {
     let calls = 0;
-    const translator = new SourceTranslator({ streamResponse: async () => { calls++; return json({ translation: 'wrong' }); } });
-    await expect(translator.translate(source, 'en', 'fixture', new AbortController().signal)).rejects.toMatchObject({ code: 'public.translationNumbers' });
-    expect(calls).toBe(0);
+    const translator = new SourceTranslator({ streamResponse: async request => {
+      calls++;
+      expect(input(request).source).toBe(source);
+      return json({ translation: 'Draft without a number.' });
+    } });
+    expect(await translator.translate(source, 'en', 'fixture', new AbortController().signal)).toBe('Draft without a number.');
+    expect(calls).toBe(1);
   });
   it('일반 문장 없는 숫자·코드·URL·수식은 추론 없이 보존한다', async () => {
     const translator = new SourceTranslator({ streamResponse: async () => { throw new Error('must not infer'); } });
     const source = '-42 +7.5%\n`v2` https://example.com/v1 x = 42';
     expect(await translator.translate(source, 'en', 'fixture', new AbortController().signal)).toBe(source);
   });
-  it('PDF 쪽 표제는 보존하되 본문의 수치는 계속 차단한다', async () => {
+  it('본문에 수치가 있어도 PDF 쪽 표제를 보존한다', async () => {
     const translator = new SourceTranslator({ streamResponse: async request => review(request) ? json({ reason: 'fixture', verdict: 'pass' }) : json({ translation: input(request).source }) });
-    const source = '# PDF 1쪽\n\nA cache stores a copy.';
+    const source = '# PDF 1쪽\n\nA cache stores a copy. It holds 100 items.';
     expect(await translator.translate(source, 'en', 'fixture', new AbortController().signal)).toBe(source);
-    await expect(translator.translate(source + ' It holds 100 items.', 'en', 'fixture', new AbortController().signal)).rejects.toMatchObject({ code: 'public.translationNumbers' });
   });
   it('코드·URL·수식만 있는 원문은 추론 없이 그대로 보존한다', async () => {
     let calls = 0; const translator = new SourceTranslator({ streamResponse: async () => { calls++; return json({ translation: '오류' }); } });
@@ -182,11 +185,6 @@ describe('실제 모델에서 발견한 번역 품질 회귀', () => {
     const source = '__SWA_0__ Keep `config.json`.';
     const protectedSource = protectTranslationLiterals(source);
     expect(protectedSource.restore(protectedSource.text)).toBe(source);
-  });
-  it('숫자의 부호·소수점·백분율도 보호 문자열에 포함한다', () => {
-    const protectedSource = protectTranslationLiterals('Keep -42 and +7.5% unchanged.');
-    expect(protectedSource.text).not.toContain('-42'); expect(protectedSource.text).not.toContain('+7.5%');
-    expect(protectedSource.forReview(protectedSource.text)).toContain('-42 and +7.5%');
   });
   it('문단 줄바꿈과 들여쓰기를 모델이 공백으로 바꿀 수 없다', async () => {
     const source = 'First line.\n\n  Second line.';

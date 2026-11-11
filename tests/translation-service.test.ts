@@ -4,10 +4,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppService } from '../electron/app-service.js';
+import { TRANSLATION_REVISION } from '../electron/translation.js';
 import { LibraryStore } from '../electron/library.js';
 import { localProvider } from './helpers/local-provider.js';
 import { pdfSource } from '../src/learning/pdf.js';
 import { studyPassage } from '../src/learning/session.js';
+import { translationSentencePairs, compareTranslationNumbers } from '../src/learning/translation.js';
 import type { CoachRequest } from '../src/shared/types.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -39,7 +41,7 @@ describe('원문 번역 서비스와 저장', () => {
     await service.studySession({ type: 'start', documentId: id });
     const before = document(), workspace = service.getStudyWorkspace(id);
     await service.translateDocument(id, 'ko', 'unit', 'unit-0');
-    expect(document().translations?.['unit-0']?.ko).toMatchObject({ sourceText: before.source, text: `${'한국어번역을검증하는합성결과입니다'.repeat(4)}: ${before.source}`, model: 'test', targetLanguage: 'ko', identity: { responseLanguage: 'ko', providerId: 'ollama', promptRevision: 5 } });
+    expect(document().translations?.['unit-0']?.ko).toMatchObject({ sourceText: before.source, text: `${'한국어번역을검증하는합성결과입니다'.repeat(4)}: ${before.source}`, model: 'test', targetLanguage: 'ko', identity: { responseLanguage: 'ko', providerId: 'ollama', promptRevision: TRANSLATION_REVISION } });
     expect({ ...document(), translations: undefined }).toEqual({ ...before, translations: undefined });
     expect(service.getStudyWorkspace(id)).toEqual(workspace);
     await service.translateDocument(id, 'ko', 'unit', 'unit-0');
@@ -50,7 +52,7 @@ describe('원문 번역 서비스와 저장', () => {
     expect(document().translations?.['unit-0']?.en?.text).toContain('en:');
   });
   it.each([true, false])('언어 재생성 결과만 저장하고 반복 혼입은 원문·답안을 보존한다 (복구 %s)', async recovered => {
-    const { service, client, id, document, path } = await setup('A cache stores a copy. It may become stale.');
+    const { service, client, id, document, path } = await setup('A cache stores a copy that may become stale.');
     await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
     const before = document();
     let generations = 0;
@@ -64,7 +66,7 @@ describe('원문 번역 서비스와 저장', () => {
     };
     if (recovered) {
       await service.translateDocument(id, 'ko', 'unit');
-      expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(5);
+      expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(TRANSLATION_REVISION);
       expect(document().translations?.['unit-0']?.ko?.text).not.toContain('陈旧');
     } else {
       await expect(service.translateDocument(id, 'ko', 'unit')).rejects.toMatchObject({ code: 'public.aiQuality' });
@@ -103,7 +105,9 @@ describe('원문 번역 서비스와 저장', () => {
     const { service, store, id, document, calls } = await setup();
     await service.translateDocument(id, 'ko', 'unit');
     await store.update(library => {
-      library.documents[0]!.translations!['unit-0']!.ko!.identity.promptRevision = 4;
+      const draft = library.documents[0]!.translations!['unit-0']!.ko!;
+      draft.identity.promptRevision = 4;
+      delete draft.sentenceEnds;
       return library;
     });
     await service.study({ type: 'select-document', documentId: id });
@@ -111,17 +115,42 @@ describe('원문 번역 서비스와 저장', () => {
     expect(calls).toHaveLength(1);
     const before = document();
     await service.translateDocument(id, 'ko', 'unit');
-    expect(document().translations?.['unit-0']?.ko?.identity.promptRevision).toBe(5);
+    expect(document().translations?.['unit-0']?.ko).toMatchObject({ identity: { promptRevision: TRANSLATION_REVISION }, sentenceEnds: expect.any(Array) });
     expect(calls).toHaveLength(2);
     expect({ ...document(), translations: undefined }).toEqual({ ...before, translations: undefined });
   });
-  it('수치 문장은 저장 전에 차단하고 원문·답안·노트를 보존한다', async () => {
-    const { service, id, document, calls } = await setup('잔액 100에서 30을 출금하면 70입니다.');
+  it('전체 자료에서 숫자 문장을 초안으로 저장하고 이후 구간까지 번역한다', async () => {
+    const numeric = 'First takes 12 ms. Second takes 15 ms. The rate is 30%. The limit is 12 ms.';
+    const source = numeric + '\n\n' + 'More source material. '.repeat(100) + 'Final readable section.';
+    const { service, id, document, client, path } = await setup(source);
+    client.streamResponse = async request => {
+      const payload = JSON.parse((request.input as { content: string }[])[1]!.content);
+      const text = payload.source.replace('First takes 12 ms.', 'First takes 15 ms.')
+        .replace('Second takes 15 ms.', 'Second takes 12 ms.')
+        .replace('The rate is 30%.', 'The rate is unknown.')
+        .replace('The limit is 12 ms.', 'The limit is 12 s.');
+      return { text: JSON.stringify({ translation: text }) };
+    };
     await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
     const before = document(), workspace = service.getStudyWorkspace(id);
-    await expect(service.translateDocument(id, 'en', 'unit')).rejects.toMatchObject({ code: 'public.translationNumbers' });
-    expect(document()).toEqual(before); expect(service.getStudyWorkspace(id)).toEqual(workspace);
-    expect(calls).toHaveLength(0); expect(service.getState().busy).toBeNull();
+    expect(before.units.length).toBeGreaterThan(1);
+    await service.translateDocument(id, 'en', 'document');
+    const saved = document();
+    expect(saved.units.every(unit => saved.translations?.[unit.id]?.en?.sentenceEnds?.length)).toBe(true);
+    expect(saved.translations?.[saved.units.at(-1)!.id]?.en?.text).toContain('Final readable section.');
+    const draft = saved.translations!['unit-0']!.en!;
+    expect(translationSentencePairs(draft).slice(0, 4).map(({ source, text }) => compareTranslationNumbers(source, text))).toEqual([
+      { source: ['12 ms'], translation: ['15 ms'] },
+      { source: ['15 ms'], translation: ['12 ms'] },
+      { source: ['30%'], translation: [] },
+      { source: ['12 ms'], translation: ['12 s'] },
+    ]);
+    expect({ ...saved, translations: undefined }).toEqual({ ...before, translations: undefined });
+    expect(service.getStudyWorkspace(id)).toEqual(workspace);
+    expect(service.getState().busy).toBeNull();
+    service.dispose();
+    const reopened = new AppService(new LibraryStore(path)); cleanups.push(() => reopened.dispose()); await reopened.initialize();
+    expect(reopened.getState().library.documents[0]).toEqual(saved);
   });
   it('같이 공부하기는 현재 작은 구간만 번역하고 이동·재실행 후에도 구간별 초안을 복원한다', async () => {
     const source = 'First passage only. '.padEnd(420, 'x') + '1) The bag weighs 5 kg.';

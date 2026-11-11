@@ -114,18 +114,18 @@ select { width: 100%; font-size: 13px; }
 .translation-progress { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-block: 16px; font-size: 12px; color: var(--moss-dark); }
 .translation-current { margin-top: 22px; }
 .translation-current > h4 { font-size: 12px; overflow-wrap: anywhere; }
-.translation-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 15px; }
-.translation-comparison > div { min-width: 0; }
-.translation-comparison h4 { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.translation-comparison { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 15px; }
+.translation-comparison th { font-size: 11px; color: var(--muted); text-align: start; }
+.translation-comparison th, .translation-comparison td { padding: 8px; vertical-align: top; overflow-wrap: anywhere; }
+.translation-comparison td { border-top: 1px solid var(--line); }
 .translation-comparison p { font-size: 13px; line-height: 1.95; overflow-wrap: anywhere; }
-.translation-numbers { overflow-wrap: anywhere; }
+.translation-numbers { margin-top: 8px; padding: 8px; background: #fbf0db; color: #664408; border-radius: 6px; font-size: 12px; }
 .translation-metadata { margin-top: 12px; overflow-wrap: anywhere; }
 .translation-empty { margin-top: 18px; }
 .translation-saved { margin-top: 20px; font-size: 12px; }
 .translation-saved summary { cursor: pointer; line-height: 1.8; overflow-wrap: anywhere; }
 .translation-saved > .small-copy { margin-top: 10px; }
 .translation-saved-unit { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-@media (max-width: 800px) { .translation-comparison { grid-template-columns: minmax(0, 1fr); } }
 .hidden-source { min-height: 300px; padding: 47px 12px; border: 1px dashed #dce2d2; text-align: center; background: #f7f8f0; }
 .hidden-source-symbol { font-size: 34px; color: #96a78a; display: block; margin-bottom: 18px; }
 .hidden-source h3 { font-size: 16px; font-weight: 550; color: #657758; }

@@ -1,10 +1,10 @@
-import type { ReadingUnit, TranslationScope } from '../shared/types.js';
+import type { ReadingUnit, SourceTranslation, TranslationScope } from '../shared/types.js';
 import { validateAIResultIdentity } from '../shared/ai-identity.js';
 import { PublicError } from '../shared/public-errors.js';
 import { readingPassages } from './reading.js';
 
 export const MAX_TRANSLATION_LENGTH = 30_000;
-export const TRANSLATION_LITERALS = /^# PDF \d+쪽$|```[\s\S]*?(?:```|(?![\s\S]))|~~~[\s\S]*?(?:~~~|(?![\s\S]))|`[^`\n]+`|https?:\/\/[^\s<>`]+|\$\$[\s\S]*?\$\$|\$[^$\n]+\$(?!\d)|\b[A-Za-z]\w*(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*[ \t]*=[ \t]*[A-Za-z0-9]+(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*/gm;
+export const TRANSLATION_LITERALS = /^# PDF \d+쪽$|```[\s\S]*?(?:```|(?![\s\S]))|~~~[\s\S]*?(?:~~~|(?![\s\S]))|`[^`\n]+`|https?:\/\/[^\s<>`]+(?<![.!?,;:])|\$\$[\s\S]*?\$\$|\$[^$\n]+\$(?!\d)|\b[A-Za-z]\w*(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*[ \t]*=[ \t]*[A-Za-z0-9]+(?:[²³]|\^\d+)?(?:[ \t]*[+*/−-][ \t]*[A-Za-z0-9]+)*/gm;
 
 export function validateTranslationScope(value: unknown): TranslationScope {
   if (value !== 'passage' && value !== 'unit' && value !== 'document') throw new PublicError('public.translationInvalid');
@@ -48,11 +48,37 @@ function validateDraftLanguages(value: unknown, source: string): void {
       || typeof raw.createdAt !== 'string' || raw.createdAt.length > 100 || !Number.isFinite(Date.parse(raw.createdAt))) {
       throw new PublicError('public.translationInvalid');
     }
-    validateTranslationText(raw.text);
+    const text = validateTranslationText(raw.text);
+    if (raw.sentenceEnds !== undefined) validateSentenceEnds(raw.sentenceEnds, source, text);
     try {
       if (validateAIResultIdentity(raw.identity).responseLanguage !== language) throw new PublicError('public.translationInvalid');
     } catch { throw new PublicError('public.translationInvalid'); }
   }
+}
+
+function validateSentenceEnds(value: unknown, source: string, text: string): void {
+  if (!Array.isArray(value) || !value.length || value.length > source.length) throw new PublicError('public.translationInvalid');
+  let sourceStart = 0, textStart = 0;
+  for (const item of value) {
+    const { sourceEnd, textEnd } = object(item);
+    if (typeof sourceEnd !== 'number' || !Number.isSafeInteger(sourceEnd) || sourceEnd <= sourceStart || sourceEnd > source.length
+      || !source.slice(sourceStart, sourceEnd).trim()
+      || typeof textEnd !== 'number' || !Number.isSafeInteger(textEnd) || textEnd < textStart || textEnd > text.length) {
+      throw new PublicError('public.translationInvalid');
+    }
+    sourceStart = sourceEnd; textStart = textEnd;
+  }
+  if (sourceStart !== source.length || textStart !== text.length) throw new PublicError('public.translationInvalid');
+}
+
+export function translationSentencePairs(draft: SourceTranslation): { source: string; text: string }[] {
+  if (!draft.sentenceEnds) return [{ source: draft.sourceText, text: draft.text }];
+  let sourceStart = 0, textStart = 0;
+  return draft.sentenceEnds.map(({ sourceEnd, textEnd }) => {
+    const pair = { source: draft.sourceText.slice(sourceStart, sourceEnd), text: draft.text.slice(textStart, textEnd) };
+    sourceStart = sourceEnd; textStart = textEnd;
+    return pair;
+  });
 }
 
 // Match common literal units and their Korean/English spellings without attempting unit conversion.

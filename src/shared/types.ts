@@ -54,6 +54,7 @@ export interface RecallRecord {
 export interface SourceTranslation {
   sourceText: string; text: string; targetLanguage: ResponseLanguage;
   model: string; identity: AIResultIdentity; createdAt: string;
+  sentenceEnds?: { sourceEnd: number; textEnd: number }[];
 }
 type TranslationDrafts = Partial<Record<ResponseLanguage, SourceTranslation>>;
 export type TranslationScope = 'passage' | 'unit' | 'document';

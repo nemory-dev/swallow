@@ -1,32 +1,52 @@
 import { TRANSLATION_LITERALS } from '../src/learning/translation.js';
 import { PublicError } from '../src/shared/public-errors.js';
 
-/** Protect technical spans before chunking, so neither chunk boundaries nor the model can edit them. */
-export function protectTranslationLiterals(source: string, allowProseNumbers = false) {
+const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+
+/** Protect technical spans and optionally mark the original sentence boundaries. */
+export function protectTranslationLiterals(source: string, alignSentences = false) {
   let prefix = '__SWA_';
   while (source.includes(prefix)) prefix += '_';
   const values: string[] = [];
-  const whitespace = /[ \t]*\r?\n[ \t]*/;
-  const numbers = /[+−-]?\d+(?:[.,]\d+)*(?:%|²|³)?/;
-  const pattern = new RegExp([TRANSLATION_LITERALS.source, whitespace.source, ...(allowProseNumbers ? [] : [numbers.source])].join('|'), 'gm');
-  const text = source.replace(pattern, value => { const token = `${prefix}${values.length}__`; values.push(value); return token; });
+  const protect = (value: string) => { const token = `${prefix}${values.length}__`; values.push(value); return token; };
+  const masked = source.replace(TRANSLATION_LITERALS, protect);
+  let marked = '', start = 0;
+  if (alignSentences) {
+    // Mask technical spans before segmenting and attach blank lines to their neighbors.
+    for (const { segment, index } of segmenter.segment(masked)) {
+      if (!segment.trim() || !masked.slice(start, index).trim()) continue;
+      marked += masked.slice(start, index) + protect('');
+      start = index;
+    }
+  }
+  const text = (marked + masked.slice(start)).replace(/[ \t]*\r?\n[ \t]*/g, protect);
   const tokens = new RegExp(`${prefix}\\d+__`, 'g');
+  const valueOf = (token: string) => values[Number(token.slice(prefix.length, -2))]!;
   const matches = (value: string) => value.match(tokens) ?? [];
   const prose = (value: string) => value.replace(tokens, '');
-  return { text, tokens, prose, hasProseNumbers: /\p{Number}/u.test(prose(text)) || values.some(value => /^[+−-]?\d/.test(value)),
-    forReview(value: string): string {
-      return value.replace(tokens, token => {
-        const literal = values[Number(token.slice(prefix.length, -2))]!;
-        // Numeric roles and paragraph structure must remain readable to the semantic checker.
-        return /^[+−-]?\d/.test(literal) || /^\s+$/u.test(literal) ? literal : token;
-      });
-    },
-    restore(value: string, original = text): string {
-      if (JSON.stringify(matches(value)) !== JSON.stringify(matches(original))) throw new PublicError('public.translationIntegrity');
-      const result = value.replace(tokens, token => values[Number(token.slice(prefix.length, -2))]!);
-      // Original source may contain a shorter, colliding prefix; only the chosen prefix is reserved.
-      if (result.includes(prefix)) throw new PublicError('public.translationIntegrity');
-      return result;
-    },
+  const verify = (value: string, original = text) => {
+    if (JSON.stringify(matches(value)) !== JSON.stringify(matches(original)) || prose(value).includes(prefix))
+      throw new PublicError('public.translationIntegrity');
   };
+  function splitAtSentenceBreaks(value: string): string[] {
+    const parts: string[] = [];
+    let offset = 0;
+    for (const match of value.matchAll(tokens)) {
+      const token = match[0];
+      if (valueOf(token) !== '') continue;
+      parts.push(value.slice(offset, match.index), token);
+      offset = match.index + token.length;
+    }
+    parts.push(value.slice(offset));
+    return parts;
+  }
+  function restore(value: string, original = text): string {
+    verify(value, original);
+    return value.replace(tokens, valueOf);
+  }
+  function sentences(value: string): string[] {
+    verify(value);
+    return splitAtSentenceBreaks(value).filter((_, index) => index % 2 === 0).map(part => part.replace(tokens, valueOf));
+  }
+  return { text, tokens, prose, verify, restore, sentences, splitAtSentenceBreaks };
 }
