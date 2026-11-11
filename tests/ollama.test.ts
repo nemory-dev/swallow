@@ -55,6 +55,8 @@ describe('Ollama loopback 계약', () => {
     await expect(coach.run('guide', doc, doc.units[0]!.id, () => {}, model.slug)).resolves.toMatchObject({ overview: '회상 설명' });
     const body = calls.find(call => call.path === '/api/chat')!.body;
     expect(body.stream).toBe(false); expect(body.format.additionalProperties).toBe(false);
+    expect(body).not.toHaveProperty('truncate');
+    expect(body).not.toHaveProperty('shift');
     expect(body.messages.map((message: any) => message.role)).toEqual(['system', 'user']);
     expect(body).not.toHaveProperty('tools'); expect(body).not.toHaveProperty('images');
     expect(calls.filter(call => call.path === '/api/show')).toHaveLength(2);
@@ -109,11 +111,26 @@ describe('Ollama loopback 계약', () => {
     const stopped = await fixture(); stopped.server.closeAllConnections(); await new Promise<void>(resolve => stopped.server.close(() => resolve()));
     await expect(stopped.provider.streamResponse(request(stopped.provider.state.models[0]!.slug))).rejects.toThrow();
   });
-  it('현재 공식 릴리스 0.40.4의 텍스트 계약도 같은 검증을 통과한다', async () => {
-    const { provider } = await fixture((req, res) => { if (req.url !== '/api/version') return false; res.end('{"version":"0.40.4"}'); return true; });
-    expect(provider.state.status).toBe('ready');
+  it.each(['0.40.4', '0.40.16'])('Ollama %s에서 로컬 모델만 선택하고 문맥 보호 옵션과 스키마를 보낸다', async version => {
+    const { provider, calls } = await fixture((req, res) => {
+      if (req.url === '/api/version') { res.end(JSON.stringify({ version })); return true; }
+      if (req.url !== '/api/tags') return false;
+      res.end(JSON.stringify({ models: [
+        local,
+        { ...local, name: 'alias:latest', model: 'alias:latest', remote_model: 'fixture:cloud' },
+        { ...local, name: 'fixture:cloud', model: 'fixture:cloud' },
+      ] }));
+      return true;
+    });
+    expect(provider.state).toMatchObject({ status: 'ready', version, models: [{ upstreamModelId: local.name }] });
     const doc = createDocument({ title: '회상', source: '회상한다.', goal: '' });
     await expect(new StudyCoach(provider).run('guide', doc, doc.units[0]!.id, () => {}, provider.state.models[0]!.slug)).resolves.toMatchObject({ overview: '회상 설명' });
+    const chatCalls = calls.filter(call => call.path === '/api/chat');
+    expect(chatCalls.length).toBeGreaterThan(0);
+    for (const call of chatCalls) expect(call.body).toMatchObject({
+      model: local.name, stream: false, truncate: false, shift: false,
+      format: { type: 'object', additionalProperties: false },
+    });
   });
   it('실제 설치 버전 0.24.0에서 가이드와 피드백을 전송하고 원격 모델은 계속 차단한다', async () => {
     const { provider, calls } = await fixture((req, res, body) => {

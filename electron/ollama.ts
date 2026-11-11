@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { AIModel, CoachProvider, CoachRequest, OllamaEndpoint, OllamaState } from '../src/shared/types.js';
+import { OLLAMA_PROTOCOLS, OLLAMA_PROTOCOL_VERSIONS } from '../src/shared/ai.js';
 
 const DEFAULT_ENDPOINT: OllamaEndpoint = { host: '127.0.0.1', port: 11434 };
-import { OLLAMA_PROTOCOL_VERSIONS } from '../src/shared/ai.js';
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const failure = (message: string) => new Error(message);
 function object(value: unknown): Record<string, any> {
@@ -113,10 +113,11 @@ export class OllamaProvider implements CoachProvider {
     this.cancel(); await this.save(this.value.endpoint, false); this.enabled = false;
     this.value = { ...this.value, revision: this.value.revision + 1, status: 'disconnected', models: [], message: 'Ollama 연결을 해제했습니다. 모델 파일과 서버 설정은 유지됩니다.' };
   }
-  private async catalog(signal: AbortSignal): Promise<{ models: AIModel[]; version: string }> {
+  private async catalog(signal: AbortSignal) {
     const endpoint = this.value.endpoint;
     const version = (await jsonRequest(endpoint, '/api/version', undefined, signal, this.timeouts.metadata ?? 5000, this.timeouts.idle ?? 5000)).version;
-    if (!(OLLAMA_PROTOCOL_VERSIONS as readonly unknown[]).includes(version)) throw failure(`Ollama 버전의 로컬 모델 판별 계약을 확인하지 못했습니다. 현재 API 계약 범위는 ${OLLAMA_PROTOCOL_VERSIONS.join(', ')}입니다.`);
+    const protocol = OLLAMA_PROTOCOLS.find(candidate => candidate.version === version);
+    if (!protocol) throw failure(`Ollama 버전의 로컬 모델 판별 계약을 확인하지 못했습니다. 현재 API 계약 범위는 ${OLLAMA_PROTOCOL_VERSIONS.join(', ')}입니다.`);
     const raw = await jsonRequest(endpoint, '/api/tags', undefined, signal, this.timeouts.metadata ?? 5000, this.timeouts.idle ?? 5000);
     if (!Array.isArray(raw.models) || raw.models.length > 1000) throw failure('Ollama 모델 목록 형식을 확인할 수 없습니다.');
     const connectionId = ollamaIdentity(endpoint), models: AIModel[] = [];
@@ -130,7 +131,7 @@ export class OllamaProvider implements CoachProvider {
       models.push({ slug, displayName: `${item.name} · Ollama`, providerId: 'ollama', connectionId, upstreamModelId: item.name, modelFingerprint: item.digest,
         capabilities: { text: 'unknown', vision: 'unsupported', structuredOutput: 'unknown', executionLocation: 'unknown' } });
     }
-    return { models, version };
+    return { models, protocol };
   }
   async refresh() {
     if (!this.enabled) { this.value.message = '실행 중인 Ollama 서버를 먼저 연결하세요.'; return; }
@@ -139,7 +140,7 @@ export class OllamaProvider implements CoachProvider {
     const revision = this.value.revision;
     const timer = setTimeout(() => controller.abort(), this.timeouts.catalog ?? 15000);
     try {
-      const { models, version } = await this.catalog(controller.signal);
+      const { models, protocol: { version } } = await this.catalog(controller.signal);
       if (controller.signal.aborted || this.controller !== controller || revision !== this.value.revision) return;
       this.value = { ...this.value, models, version, status: models.length ? 'ready' : 'unavailable', checkedAt: new Date().toISOString(), message: models.length ? '서버 연결됨 · 선택 모델의 로컬 메타데이터는 요청 전에 검사합니다.' : '사용 가능한 로컬 텍스트 모델이 없습니다. cloud·확인 불가 모델은 목록에서 제외됩니다.' };
     } catch (error) {
@@ -162,7 +163,7 @@ export class OllamaProvider implements CoachProvider {
     let timedOut = false;
     const overall = setTimeout(() => { timedOut = true; abort(); }, this.timeouts.request ?? 180000);
     try {
-      const { models, version } = await this.catalog(controller.signal);
+      const { models, protocol } = await this.catalog(controller.signal);
       if (!models.some(candidate => candidate.slug === model.slug)) throw failure('로컬 모델이 변경되었거나 삭제되었습니다. 목록을 새로고침하고 다시 선택하세요.');
       const show = await jsonRequest(this.value.endpoint, '/api/show', { model: model.upstreamModelId }, controller.signal, this.timeouts.metadata ?? 5000, this.timeouts.idle ?? 5000);
       const architecture = show.model_info?.['general.architecture'];
@@ -170,7 +171,14 @@ export class OllamaProvider implements CoachProvider {
         || typeof architecture !== 'string' || !Number.isSafeInteger(show.model_info?.[`${architecture}.context_length`]) || show.model_info[`${architecture}.context_length`] < 4096) throw failure('선택 모델의 로컬 텍스트 실행 정보를 확인할 수 없습니다. cloud·확인 불가 모델은 요청하지 않습니다.');
       const context = Math.min(32768, show.model_info[`${architecture}.context_length`]);
       if (Buffer.byteLength(JSON.stringify(messages), 'utf8') + 3072 > context) throw failure('선택 로컬 모델의 문맥 한도를 넘습니다. 더 작은 원문으로 요청하세요.');
-      const raw = await jsonRequest(this.value.endpoint, '/api/chat', { model: model.upstreamModelId, messages, stream: false, ...(['0.24.0', '0.40.4'].includes(version) ? { truncate: false, shift: false } : {}), format: options.responseSchema, options: { temperature: 0.2, num_ctx: context, num_predict: 2048 } }, controller.signal, this.timeouts.request ?? 180000, this.timeouts.idle ?? 30000);
+      const raw = await jsonRequest(this.value.endpoint, '/api/chat', {
+        model: model.upstreamModelId,
+        messages,
+        stream: false,
+        ...(protocol.supportsContextControls ? { truncate: false, shift: false } : {}),
+        format: options.responseSchema,
+        options: { temperature: 0.2, num_ctx: context, num_predict: 2048 },
+      }, controller.signal, this.timeouts.request ?? 180000, this.timeouts.idle ?? 30000);
       if (remote(raw) || raw.model !== model.upstreamModelId || raw.done !== true || raw.done_reason !== 'stop' || raw.message?.role !== 'assistant'
         || typeof raw.message.content !== 'string' || !raw.message.content.trim() || raw.message.content.length > 30000 || raw.message.tool_calls?.length) throw failure('로컬 모델 응답이 완성되지 않았거나 실행 정보를 확인할 수 없습니다.');
       let value: unknown; try { value = JSON.parse(raw.message.content); } catch { throw failure('로컬 모델의 JSON 응답을 해석할 수 없습니다.'); }

@@ -1,7 +1,12 @@
 import type { AppState } from './types.js';
 
-// API contract fixtures, not a claim of inference quality or offline certification.
-export const OLLAMA_PROTOCOL_VERSIONS = ['0.12.0', '0.24.0', '0.40.4'] as const;
+export const OLLAMA_PROTOCOLS = [
+  { version: '0.12.0', supportsContextControls: false },
+  { version: '0.24.0', supportsContextControls: true },
+  { version: '0.40.4', supportsContextControls: true },
+  { version: '0.40.16', supportsContextControls: true },
+] as const;
+export const OLLAMA_PROTOCOL_VERSIONS = OLLAMA_PROTOCOLS.map(protocol => protocol.version);
 export const isOllamaModel = (model: string | null | undefined): boolean => !!model?.startsWith('ollama:');
 // Historical model identifiers remain in saved records without enabling their providers.
 export const explanationProvider = (model: string | null | undefined): string => isOllamaModel(model) ? 'Ollama' : model?.startsWith('chatgpt:') ? 'ChatGPT' : 'AI';
