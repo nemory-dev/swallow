@@ -11,6 +11,7 @@ import { unitPage } from '../learning/pdf.js';
 import { PdfReader } from './PdfReader.js';
 import { TermLookup } from './TermLookup.js';
 import { SourceTranslationPanel } from './SourceTranslationPanel.js';
+import type { TranslationControls } from './TranslationStatus.js';
 import { useUpdatePreparation } from './update-preparation.js';
 
 const DRAFT_KEY = 'swallow.study-drafts.v1';
@@ -63,9 +64,10 @@ function NoteContents({ note, open, disabled, doc, bridge }: { note: StudyNote; 
     <details><summary>{t('study.sourceExcerpt')}</summary><blockquote lang="">{note.sourceExcerpt}</blockquote></details><p className="small-copy">{note.title} · {note.page ? `${t('pdf.page', { page: note.page })} · ` : ''}{t('study.noteSource', { index: note.passageIndex + 1, reference: note.source.unitId })}</p><button className="text-button" disabled={disabled} onClick={() => open(note.source)}>{t('library.openEvidence')}</button>
   </div>;
 }
-export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabledReason, onConnect, onLegacy, onBusyChange, scope, scopeName }: {
+export function StudyFlow({ bridge, doc, state, translation, pending, aiAvailable, aiDisabledReason, onConnect, onLegacy, onBusyChange, scope, scopeName }: {
   scope: LibraryScope; scopeName: string;
   bridge: SwallowBridge; doc: StudyDocument; state: AppState; pending: boolean; aiAvailable: boolean; aiDisabledReason: string | null;
+  translation: TranslationControls;
   onConnect: () => void; onLegacy: (reference?: EvidenceReference) => Promise<void>; onBusyChange: (busy: boolean) => void;
 }) {
   const { t, formatNumber, formatDate, errorText, localizeText } = useLanguage();
@@ -86,6 +88,8 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
   const [speech, setSpeech] = useState<SpeechState>({ status: 'idle', error: null });
   const [retry, setRetry] = useState(0);
   const disabled = pending || working || !!state.busy || loading;
+  const navigatingDuringTranslation = state.busy?.kind === 'translation' && state.busy.translationScope === 'document' && state.busy.documentId === doc.id;
+  const navigationDisabled = pending || working || loading || (!!state.busy && !navigatingDuringTranslation);
   const answerDisabled = pending || working || loading || (!!state.busy && state.busy.kind !== 'translation');
   const speechControlDisabled = pending || working || loading;
   const session = workspace?.session;
@@ -94,6 +98,7 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
   const currentFeedback = answer === session?.answer && !session?.unknown ? session?.answerFeedback : undefined;
   const unit = doc.units.find(value => value.id === session?.unitId);
   const passage = session && unit ? studyPassage(doc, session) : '';
+  const passages = unit ? readingPassages(unit.text, doc.passageVersion ?? 1) : [];
   const pageInfo = unit ? unitPage(doc, unit) : undefined;
   const page = pageInfo?.page;
   const hasNextPassage = !!session && !!nextStudyLocation(doc, session);
@@ -133,8 +138,8 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
     return () => window.removeEventListener('beforeunload', protect);
   }, [drafts.error, answer, session]);
 
-  async function request(operation: () => Promise<void>): Promise<void> {
-    if (workRef.current || pending || state.busy) throw new Error('다른 작업을 마친 뒤 다시 시도하세요.');
+  async function request(operation: () => Promise<void>, allowDocumentTranslation = false): Promise<void> {
+    if (workRef.current || pending || (state.busy && !allowDocumentTranslation)) throw new Error('다른 작업을 마친 뒤 다시 시도하세요.');
     workRef.current = true; setWorking(true); busyCallback.current(true); setError(null);
     try { await operation(); }
     catch (cause) { if (live.current) setError(errorText(cause)); throw cause; }
@@ -180,15 +185,23 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
   async function addTerm(term: TermNote) { const value = await bridge.studySession({ type: 'add-term', documentId: doc.id, term }); if (live.current) setWorkspace(value); }
   const openEvidence = (reference: EvidenceReference) => run(() => onLegacy(reference));
   const explain = (style: ExplanationStyle) => run(async () => { const value = await bridge.explainStudy(doc.id, style); if (live.current) setWorkspace(value); });
-  const movePassage = (type: 'next' | 'previous') => run(async () => {
-    const value = await bridge.studySession({ type, documentId: doc.id });
-    if (live.current) setWorkspace(value);
-  });
+  const movePassage = (type: 'next' | 'previous') => {
+    void request(async () => {
+      const value = await bridge.studySession({ type, documentId: doc.id });
+      if (live.current) setWorkspace(value);
+    }, navigatingDuringTranslation).catch(() => undefined);
+  };
+  const nextPassageButton = hasNextPassage ? (
+    <button className="secondary-button" disabled={navigationDisabled} onClick={() => movePassage('next')}>{t('reading.next')}</button>
+  ) : null;
+  const previousPassageButton = hasPreviousPassage ? (
+    <button className="secondary-button" disabled={navigationDisabled} onClick={() => movePassage('previous')}>{t('study.previousPassage')}</button>
+  ) : null;
   const voiceFor = (text: string) => voiceId || preferredVoice(voices, /[가-힣]/.test(text) ? 'ko' : 'en')?.id || voices[0]?.id || '';
   const retryAttempt = session?.relearning?.at(-1);
 
   return <main className="study-pane" aria-label={t('study.region')}>
-    <div className="study-topline"><span>{t('study.tagline')}</span><button className="text-button" disabled={disabled} onClick={() => run(() => onLegacy())}>{t('study.legacy')}</button></div>
+    <div className="study-topline"><span>{t('study.tagline')}</span><button className="secondary-button reading-mode-button" disabled={disabled} onClick={() => run(() => onLegacy())}>{t('study.legacy')}</button></div>
     <h2 className="document-heading" lang="">{doc.title}</h2>
     {state.models.length ? <details className="study-model-settings">
       <summary>{modelValid ? t('model.label') : <strong>{t('model.settings')}</strong>}</summary>
@@ -205,7 +218,7 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
     <ChatGPTUsage state={state} bridge={bridge} run={run} />
     {loading ? <p role="status">{t('study.loadingSaved')}</p> : !workspace ? <button className="secondary-button" onClick={() => setRetry(value => value + 1)}>{t('common.reload')}</button> : !started ? <section className="study-start"><h3>{session ? t('study.resumePrompt') : t('study.emptyTitle')}</h3><p>{t('study.startHelp')}</p>{session && <p className="small-copy">{t('study.savedPosition', { index: doc.units.findIndex(item => item.id === session.unitId) + 1, count: session.passageIndex + 1, step: t(stepKeys[session.step]) })}</p>}<button className="primary-button" disabled={disabled} onClick={() => run(async () => { const value = await bridge.studySession({ type: 'start', documentId: doc.id }); if (live.current) { setWorkspace(value); setStarted(true); } })}>{session ? t('study.resume') : t('study.start')}</button><p className="small-copy">{t('study.offlineHelp')}</p></section> : session && unit ? <>
       <ol className="study-steps" aria-label={t('study.steps')}>{(['explain', 'check', 'note', 'done'] as const).map((step, index) => <li key={step} aria-current={session.step === step ? 'step' : undefined}><span>{index + 1}</span>{t(stepKeys[step])}</li>)}</ol>
-      <p className="study-location">{unit.section || t('document.source')}{page ? ` · ${t('pdf.page', { page })}` : ''} · {t('study.partPosition', { index: session.passageIndex + 1, total: readingPassages(unit.text).length })}</p>
+      <p className="study-location">{unit.section || t('document.source')}{page ? ` · ${t('pdf.page', { page })}` : ''} · {t('study.partPosition', { index: session.passageIndex + 1, total: passages.length })}</p>
       {session.step === 'explain' && <section className="study-speech" aria-label={t('speech.region')}><div className="study-actions"><button className="secondary-button" disabled={disabled || voices.length === 0 || speech.status !== 'idle'} onClick={() => run(() => bridge.speakStudy(doc.id, 'source', voiceFor(passage), rate))}>{t('speech.source')}</button><button className="secondary-button" disabled={disabled || voices.length === 0 || !session.guide || speech.status !== 'idle'} onClick={() => run(() => bridge.speakStudy(doc.id, 'explanation', voiceFor(session.guide?.overview ?? ''), rate))}>{t('speech.explanation')}</button>{speech.status === 'speaking' && <button className="text-button" disabled={speechControlDisabled} onClick={() => { void controlSpeech('pause'); }}>{t('speech.pause')}</button>}{speech.status === 'paused' && <button className="text-button" disabled={speechControlDisabled} onClick={() => { void controlSpeech('resume'); }}>{t('speech.resumeListening')}</button>}{speech.status !== 'idle' && <button className="text-button" disabled={speechControlDisabled} onClick={() => { void controlSpeech('stop'); }}>{t('speech.stopListening')}</button>}</div><p className="small-copy">{speech.status === 'speaking' ? t('speech.speaking') : speech.status === 'paused' ? t('speech.paused') : voices.length === 0 ? t('speech.noLocalVoice') : t('speech.deviceHelp', { voice: voices.find(voice => voice.id === voiceFor(session.guide?.overview ?? passage))?.name ?? t('speech.checkVoice') })}</p><details><summary>{t('speech.settings')}</summary><div className="voice-settings"><label>{t('speech.voiceLabel')}<select value={voiceId} disabled={disabled || speech.status !== 'idle'} onChange={event => setVoiceId(event.target.value)}><option value="">{t('speech.autoVoice')}</option>{voices.map(voice => <option key={voice.id} value={voice.id}>{voice.name} · {voice.lang}</option>)}</select></label><label>{t('speech.rate')}<select value={rate} disabled={disabled || speech.status !== 'idle'} onChange={event => setRate(Number(event.target.value))}>{[0.75, 1, 1.25, 1.5].map(value => <option key={value} value={value}>{formatNumber(value)}{t('speech.speedSuffix')}</option>)}</select></label></div></details></section>}
       {session.step === 'explain' ? <section className="study-turn"><h3>{retryAttempt ? t('study.restartKnown') : t('study.startHere')}</h3>{retryAttempt && <div className="study-relearning"><p>{t('study.retryQuestion', { question: retryAttempt.question })}</p><p className="preserve-text">{t('study.retryAnswer', { answer: retryAttempt.answer || t('study.nothingYet') })}</p><p className="small-copy">{t('study.relearningHelp')}</p>{!session.guide && <button className="primary-button" disabled={disabled || !aiAvailable} onClick={() => explain('relearn')}>{t('study.relearn')}</button>}</div>}
         {!aiAvailable && <p className="small-copy">{aiDisabledReason}<button className="text-button" onClick={onConnect}>{t('account.studySettings')}</button></p>}
@@ -215,15 +228,19 @@ export function StudyFlow({ bridge, doc, state, pending, aiAvailable, aiDisabled
         <details className="study-original"><summary>{t('study.sourceCharacters', { count: passage.length })}</summary><pre className="study-source" lang="">{passage}</pre></details>{doc.pdf && <details className="study-pdf"><summary>{t('study.pdfSource', { page: page! })}</summary><PdfReader key={unit.id} bridge={bridge} doc={doc} unit={unit} requestedPage={null} pending={disabled} /></details>}
         <div className="study-actions">
           <button className="primary-button" disabled={disabled} onClick={() => run(async () => { const next = await bridge.studySession({ type: 'step', documentId: doc.id, step: 'check' }); if (live.current) setWorkspace(next); })}>{t('study.tryQuestion')}</button>
-          {hasPreviousPassage && <button className="secondary-button" disabled={disabled} onClick={() => movePassage('previous')}>{t('study.previousPassage')}</button>}
-          {hasNextPassage ? <button className="secondary-button" disabled={disabled} onClick={() => movePassage('next')}>{t('reading.next')}</button> : <p className="small-copy" role="status">{t('study.lastPassage')}</p>}
+          {previousPassageButton}
+          {nextPassageButton}
         </div>
       </section> : session.step === 'check' ? <section className="study-turn"><h3>{t('study.answerHelp')}</h3><p className="study-question" lang={session.responseLanguage ?? 'ko'}>{studyQuestion(session)}</p><label className="field-label">{t('study.answer')}<textarea lang="" className="study-answer" value={answer} maxLength={10000} disabled={answerDisabled} onChange={event => editAnswer(event.target.value)} placeholder={t('study.answerPlaceholder')} /></label><p className="small-copy">{t('count.characters', { count: answer.length })} · {answer === session.answer ? t('study.savedAnswer') : t('study.draftAnswer')}</p><div className="study-actions"><button className="secondary-button" disabled={disabled || !answer.trim()} onClick={() => run(() => saveAnswer(false, false))}>{t('study.saveAnswer')}</button><button className="primary-button" disabled={disabled || !answer.trim() || !aiAvailable} onClick={() => run(feedback)}>{t('study.answerFeedback')}</button><button className="secondary-button" disabled={disabled || !answer.trim()} onClick={() => run(() => saveAnswer(false, true))}>{t('study.saveAndNote')}</button><button className="secondary-button" disabled={disabled} onClick={() => run(relearn)}>{t('study.unknown')}</button></div><p className="small-copy">{t('study.feedbackSend', { provider: explanationProvider(state.library.selectedModel) })}</p>{!aiAvailable && <p className="small-copy">{aiDisabledReason}<button className="text-button" disabled={disabled} onClick={onConnect}>{t('account.studySettings')}</button></p>}{currentFeedback && <AnswerFeedbackContents value={currentFeedback} />}{session.answerFeedback && !currentFeedback && <p className="small-copy">{t('study.feedbackStale')}</p>}<details><summary>{t('study.sourceIfStuck')}</summary><pre className="study-source" lang="">{passage}</pre></details><button className="text-button" disabled={disabled} onClick={() => run(async () => { const next = await bridge.studySession({ type: 'step', documentId: doc.id, step: 'explain' }); if (live.current) setWorkspace(next); })}>{t('study.backExplain')}</button><button className="text-button" disabled={disabled} onClick={() => run(() => saveAnswer(true, true))}>{t('study.saveUnknown')}</button></section> : session.step === 'note' ? <section className="study-turn"><h3>{t('study.notePrompt')}</h3><p className="study-origin">{session.answerFeedback ? t('study.saveFeedbackHelp') : session.guide ? t('study.saveAiHelp') : t('study.saveSourceHelp')}</p><p className="preserve-text" lang={session.guide ? session.guide.identity?.responseLanguage ?? session.responseLanguage ?? 'ko' : ''}>{session.guide?.overview ?? passage}</p><h4>{t('study.answer')}</h4>{session.unknown && <p>{t('study.unknownNote')}</p>}{session.answer && <p className="preserve-text" lang="">{session.answer}</p>}{session.answerFeedback && <AnswerFeedbackContents value={session.answerFeedback} />}<p className="small-copy">{t('study.notePreviewSource', { title: doc.title, index: session.passageIndex + 1, count: session.terms.length })}{page ? ` · ${t('pdf.page', { page })}` : ''}</p><div className="study-actions"><button className="primary-button" disabled={disabled} onClick={() => run(async () => { const value = await bridge.saveStudyNote(doc.id); if (live.current) setWorkspace(value); })}>{t('study.saveNote')}</button><button className="text-button" disabled={disabled} onClick={() => run(async () => { const value = await bridge.studySession({ type: 'step', documentId: doc.id, step: 'check' }); if (live.current) setWorkspace(value); })}>{t('study.editAnswer')}</button></div></section> : <section className="study-turn study-complete"><h3>{t('study.completed')}</h3><p>{t('study.savedNoteHelp')}</p><div className="study-actions"><button className="secondary-button" disabled={disabled} onClick={() => setStarted(false)}>{t('study.finish')}</button><button className="primary-button" disabled={disabled || !hasNextPassage} onClick={() => movePassage('next')}>{t('study.next')}</button></div>{!hasNextPassage && <p className="small-copy">{t('study.terminal')}</p>}</section>}
 
-      <SourceTranslationPanel bridge={bridge} state={state} doc={doc} unitId={session.unitId} passageIndex={session.passageIndex} disabled={pending || working || loading} />
+      <SourceTranslationPanel bridge={bridge} state={state} doc={doc} unitId={session.unitId} passageIndex={session.passageIndex} translation={translation} disabled={pending || working || loading} />
+      {session.step === 'explain' && <div className="study-actions">
+        {previousPassageButton}
+        {nextPassageButton ?? <p className="small-copy" role="status">{t('study.lastPassage')}</p>}
+      </div>}
       <TermLookup key={`${key}:${scope.kind}:${scope.kind === 'folder' ? scope.folderId : ''}`} scope={scope} scopeName={scopeName} provider={explanationProvider(state.library.selectedModel)} bridge={bridge} documentId={doc.id} disabled={disabled} aiAvailable={aiAvailable} request={request} add={addTerm} />
     </> : <p role="alert">{t('study.locationMissing')}</p>}
-    {working && <p role="status" className="small-copy">{t('common.processing')}{state.busy?.kind === 'feedback' ? t('study.waitingFeedback') : state.busy ? t('study.waitingAi') : ''}</p>}{state.busy && <button className="text-button" onClick={() => { void bridge.cancelRequest().catch(cause => setError(errorText(cause))); }}>{t('study.cancelAi')}</button>}
+    {working && <p role="status" className="small-copy">{t('common.processing')}{state.busy?.kind === 'feedback' ? t('study.waitingFeedback') : state.busy?.kind === 'guide' ? t('study.waitingAi') : ''}</p>}{state.busy && state.busy.kind !== 'translation' && <button className="text-button" onClick={() => { void bridge.cancelRequest().catch(cause => setError(errorText(cause))); }}>{t('study.cancelAi')}</button>}
     <details className="study-notes"><summary>{t('study.savedNotes', { count: workspace?.notes.length ?? 0 })}</summary>{workspace?.notes.length ? workspace.notes.map(note => <details key={note.id} className="saved-note"><summary>{note.page ? `${t('pdf.page', { page: note.page })} · ` : ''}{t('study.savedNoteHeading', { index: note.passageIndex + 1, date: formatDate(note.updatedAt) })}</summary><NoteContents note={note} open={openEvidence} disabled={disabled} doc={doc} bridge={bridge} /></details>) : <p className="small-copy">{t('study.noNotesHelp')}</p>}</details>
   </main>;
 }

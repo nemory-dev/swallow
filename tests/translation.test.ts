@@ -57,7 +57,7 @@ describe('원문 번역 엔진', () => {
     let captured: CoachRequest | undefined;
     const translator = new SourceTranslator({ streamResponse: async request => { const checked = qualityReply(request); if (checked) return checked; captured = request; return response(JSON.parse((request.input as {content: string}[])[1]!.content).source); } });
     expect(await translator.translate(source, language, 'fixture', new AbortController().signal)).toBe(source);
-    expect(TRANSLATION_REVISION).toBe(7);
+    expect(TRANSLATION_REVISION).toBe(8);
     expect(captured?.responseLanguage).toBe(language);
     expect(captured?.model).toBe('fixture');
     const messages = captured!.input as Exclude<CoachRequest['input'], string>;
@@ -123,6 +123,23 @@ describe('원문 번역 엔진', () => {
     expect(seen).toHaveLength(3);
     expect(seen[1]).not.toContain('Next');
     expect(seen[2]).toBe(second);
+  });
+  it('읽기 구간에 걸친 코드의 원문을 지키면서 대응 경계를 저장한다', async () => {
+    const code = '```ts\n' + 'sensitiveToSpacing = 4; '.repeat(50) + '\n```';
+    const source = 'Read the code.\n' + code + '\nContinue to the next section.';
+    const passages = readingPassages(source);
+    const translator = new SourceTranslator({ streamResponse: async request => {
+      const payload = JSON.parse((request.input as { content: string }[])[1]!.content);
+      expect(payload.source).not.toContain('sensitiveToSpacing');
+      return response(payload.source);
+    } });
+    const translated = await translator.translateDraft(source, 'en', 'fixture', new AbortController().signal, passages);
+    expect(translated.text).toBe(source);
+    let boundary = 0;
+    for (const passage of passages) {
+      boundary += passage.length;
+      expect(translated.sentenceEnds).toContainEqual({ sourceEnd: boundary, textEnd: boundary });
+    }
   });
   it('빈 원문·잘못된 언어·빈 모델을 요청 전에 거부한다', async () => {
     const streamResponse = vi.fn(async () => response('translation'));

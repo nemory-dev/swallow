@@ -60,6 +60,7 @@ type TranslationDrafts = Partial<Record<ResponseLanguage, SourceTranslation>>;
 export type TranslationScope = 'passage' | 'unit' | 'document';
 export interface StudyDocument {
   id: string; title: string; source: string; goal: string; createdAt: string;
+  passageVersion?: 2;
   sourceUrl?: string;
   pdf?: PdfSource;
   units: ReadingUnit[]; position: number; readUnitIds: string[];
@@ -138,7 +139,7 @@ export interface AppState {
   library: LibraryState;
   models: AIModel[];
   busy: { kind: 'guide' | 'feedback' | 'translation'; documentId: string; unitId: string; startedAt: string;
-    targetLanguage?: ResponseLanguage; progress?: { completed: number; total: number } } | null;
+    targetLanguage?: ResponseLanguage; translationScope?: TranslationScope; progress?: { completed: number; total: number } } | null;
   streamText: string; notice: string | null;
 }
 export type StudyAction =

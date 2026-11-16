@@ -26,12 +26,12 @@ export function validateTranslations(value: unknown, units: ReadingUnit[]): void
     validateDraftLanguages(languages, source);
   }
 }
-export function validatePassageTranslations(value: unknown, units: ReadingUnit[]): void {
+export function validatePassageTranslations(value: unknown, units: ReadingUnit[], version: 1 | 2): void {
   const unitTexts = new Map(units.map(unit => [unit.id, unit.text]));
   for (const [unitId, drafts] of Object.entries(object(value))) {
     const source = unitTexts.get(unitId);
     if (source === undefined) throw new PublicError('public.translationInvalid');
-    const passages = readingPassages(source);
+    const passages = readingPassages(source, version);
     for (const [index, languages] of Object.entries(object(drafts))) {
       const passage = passages[Number(index)];
       if (String(Number(index)) !== index || !passage?.trim()) throw new PublicError('public.translationInvalid');
@@ -62,7 +62,6 @@ function validateSentenceEnds(value: unknown, source: string, text: string): voi
   for (const item of value) {
     const { sourceEnd, textEnd } = object(item);
     if (typeof sourceEnd !== 'number' || !Number.isSafeInteger(sourceEnd) || sourceEnd <= sourceStart || sourceEnd > source.length
-      || !source.slice(sourceStart, sourceEnd).trim()
       || typeof textEnd !== 'number' || !Number.isSafeInteger(textEnd) || textEnd < textStart || textEnd > text.length) {
       throw new PublicError('public.translationInvalid');
     }
@@ -79,6 +78,25 @@ export function translationSentencePairs(draft: SourceTranslation): { source: st
     sourceStart = sourceEnd; textStart = textEnd;
     return pair;
   });
+}
+
+export function translationPassage(draft: SourceTranslation, passages: readonly string[], index: number): SourceTranslation | undefined {
+  if (passages.length === 1 && index === 0) return draft;
+  const sourceText = passages[index];
+  if (!sourceText || !draft.sentenceEnds) return undefined;
+  const start = passages.slice(0, index).reduce((offset, passage) => offset + passage.length, 0);
+  const end = start + sourceText.length;
+  const ends = draft.sentenceEnds;
+  const before = start === 0 ? -1 : ends.findIndex(item => item.sourceEnd === start);
+  const last = ends.findIndex(item => item.sourceEnd === end);
+  if ((start !== 0 && before < 0) || last <= before) return undefined;
+  const textStart = ends[before]?.textEnd ?? 0;
+  return {
+    ...draft, sourceText, text: draft.text.slice(textStart, ends[last]!.textEnd),
+    sentenceEnds: ends.slice(before + 1, last + 1).map(({ sourceEnd, textEnd }) => ({
+      sourceEnd: sourceEnd - start, textEnd: textEnd - textStart,
+    })),
+  };
 }
 
 // Match common literal units and their Korean/English spellings without attempting unit conversion.

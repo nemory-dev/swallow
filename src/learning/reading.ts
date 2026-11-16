@@ -1,9 +1,40 @@
-/** Small reading turns preserve the source exactly, including code and Unicode. */
-export function readingPassages(source: string): string[] {
+const maxPassageLength = 420;
+const sentenceSegmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+const sentenceEnding = /[.!?。！？]["'”’»」』】)\]}]*\s*$/u;
+
+/** Saved passage indexes depend on the document's original splitting rule. */
+export function readingPassages(source: string, version: 1 | 2 = 2): string[] {
+  if (version === 1) return legacyReadingPassages(source);
+  const sentences = sentenceSegmenter.segment(source)[Symbol.iterator]();
+  let next = sentences.next();
   const result: string[] = [];
   let start = 0;
   while (start < source.length) {
-    let end = Math.min(start + 420, source.length);
+    const limit = Math.min(start + maxPassageLength, source.length);
+    let sentenceEnd = start;
+    while (!next.done && next.value.index + next.value.segment.length <= limit) {
+      if (sentenceEnding.test(next.value.segment)) sentenceEnd = next.value.index + next.value.segment.length;
+      next = sentences.next();
+    }
+    // PDF extraction can insert soft line breaks inside a sentence.
+    let end = limit === source.length ? limit : sentenceEnd;
+    if (end === start) {
+      const window = source.slice(start, limit);
+      const space = [...window.matchAll(/\s+(?=\S)/gu)].at(-1);
+      end = space && space.index >= 80 ? start + space.index + space[0].length : limit;
+      if (/[\uD800-\uDBFF]/.test(source[end - 1] ?? '')) end--;
+    }
+    result.push(source.slice(start, end));
+    start = end;
+  }
+  return result;
+}
+
+function legacyReadingPassages(source: string): string[] {
+  const result: string[] = [];
+  let start = 0;
+  while (start < source.length) {
+    let end = Math.min(start + maxPassageLength, source.length);
     if (end < source.length) {
       const part = source.slice(start, end);
       const paragraph = part.lastIndexOf('\n\n');

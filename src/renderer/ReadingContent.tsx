@@ -4,9 +4,9 @@ import { readingPassages } from '../learning/reading.js';
 import { preferredVoice } from '../learning/speech.js';
 import type { ReadingUnit, SpeechState, SpeechVoice, SwallowBridge } from '../shared/types.js';
 
-export function ReadingContent({ bridge, documentId, unit, onRead, onRecall, pending }: {
+export function ReadingContent({ bridge, documentId, unit, onRead, onRecall, pending, passageVersion = 1 }: {
   bridge: SwallowBridge; documentId: string; unit: ReadingUnit;
-  onRead: () => Promise<boolean>; onRecall: () => void; pending: boolean;
+  onRead: () => Promise<boolean>; onRecall: () => void; pending: boolean; passageVersion?: 1 | 2;
 }) {
   const { t, formatNumber, errorText, localizeText } = useLanguage();
   const [voices, setVoices] = useState<SpeechVoice[]>([]);
@@ -18,7 +18,7 @@ export function ReadingContent({ bridge, documentId, unit, onRead, onRecall, pen
   const [aloud, setAloud] = useState(false);
   const [position, setPosition] = useState(0);
   const [completed, setCompleted] = useState(false);
-  const passages = useMemo(() => readingPassages(unit.text), [unit.text]);
+  const passages = useMemo(() => readingPassages(unit.text, passageVersion), [unit.text, passageVersion]);
   useEffect(() => {
     let disposed = false;
     const unsubscribe = bridge.onSpeechState(state => { if (!disposed) setSpeech(state); });

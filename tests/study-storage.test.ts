@@ -7,7 +7,7 @@ import { initializeSchema } from '../electron/library-schema.js';
 import { readingPassages } from '../src/learning/reading.js';
 import { LibraryStore } from '../electron/library.js';
 import { createDocument, applyStudyAction } from '../src/learning/document.js';
-import { applySessionAction, createStudySession } from '../src/learning/session.js';
+import { applySessionAction, createStudySession, studyPassage } from '../src/learning/session.js';
 import { pdfSource } from '../src/learning/pdf.js';
 const roots: string[] = [], stores: LibraryStore[] = [];
 const doc = (id = 'doc') => createDocument({ title: '회상하기', source: '한글 회상과 SQLite 원문을 보존합니다.\n'.repeat(100), goal: '' }, { id, now: '2026-01-01T00:00:00.000Z' });
@@ -20,6 +20,31 @@ async function ready(store: LibraryStore, answer = '  실제 답변 SQLite\n', u
 }
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 describe('세션·노트 SQLite 저장', () => {
+  it('구간 규칙이 없던 기존 자료의 노트와 한국어 초안을 같은 원문에서 다시 연다', async () => {
+    const { root, store } = await setup();
+    const source = '“' + 'Read this sentence carefully '.repeat(9).trimEnd() + '.” '
+      + 'The next sentence ' + 'has more text '.repeat(6) + '\n' + 'that continues here '.repeat(7) + 'until its final period.';
+    const document = createDocument({ title: '기존 자료', source, goal: '' }, { id: 'legacy' });
+    delete document.passageVersion;
+    const oldPassage = readingPassages(source, 1)[0]!;
+    expect(oldPassage).not.toBe(readingPassages(source)[0]);
+    document.passageTranslations = { 'unit-0': { 0: { ko: {
+      sourceText: oldPassage, text: '기존 한국어 초안입니다.', targetLanguage: 'ko', model: 'fixture',
+      identity: { providerId: 'ollama', connectionId: 'fixture-endpoint', upstreamModelId: 'fixture', modelFingerprint: 'fixture-digest', responseLanguage: 'ko', promptRevision: 7 },
+      createdAt: document.createdAt,
+    } } } };
+    await store.addDocument(document);
+    await store.updateStudySession(document.id, (_, doc, ref) => ({ ...createStudySession(doc, ref.sourceHash), step: 'note', answer: '저장한 답변입니다.' }));
+    const note = await store.saveStudyNote(document.id);
+    store.close();
+    const reopened = new LibraryStore(join(root, 'library.json')); stores.push(reopened); await reopened.load();
+    const saved = reopened.exportLibrary().documents.find(item => item.id === document.id)!;
+    const workspace = reopened.studyWorkspace(document.id);
+    expect(workspace.notes).toEqual([note]);
+    expect(note.sourceExcerpt).toBe(oldPassage);
+    expect(studyPassage(saved, workspace.session!)).toBe(oldPassage);
+    expect(saved.passageTranslations).toEqual(document.passageTranslations);
+  });
   it('피드백 포함 노트를 재열기·검색하고 기존 노트는 변경하지 않는다', async () => {
     const { root, store } = await setup(); await ready(store); const legacy = await store.saveStudyNote('doc');
     await store.updateStudySession('doc', (session, document) => applySessionAction(document, session!, { type: 'next', documentId: 'doc' }));

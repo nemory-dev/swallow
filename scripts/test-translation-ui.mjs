@@ -8,6 +8,7 @@ import electronPath from 'electron';
 
 // Build first. Playwright is an optional test tool, never an app dependency.
 const root = fileURLToPath(new URL('..', import.meta.url));
+const packagedApp = process.argv[2];
 const modulePath = process.env.SWALLOW_PLAYWRIGHT_MODULE;
 let electron;
 try { ({ _electron: electron } = await import(modulePath ? pathToFileURL(modulePath).href : 'playwright')); }
@@ -100,7 +101,7 @@ async function closeApp() {
 }
 async function launch() {
   const env = { ...process.env, SWALLOW_DATA_DIR: data }; delete env.SWALLOW_DEV_URL;
-  app = await electron.launch({ executablePath: electronPath, args: ['.'], cwd: root, env, timeout: 30000 });
+  app = await electron.launch({ executablePath: packagedApp ? join(packagedApp, 'Contents/MacOS/Swallow') : electronPath, args: packagedApp ? [] : ['.'], cwd: root, env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));
   await waitUntil(() => page.evaluate(async () => !!(await window.swallow?.getState())?.language), 'app language initialization');
@@ -111,6 +112,9 @@ const state = () => page.evaluate(() => window.swallow.getState());
 const document = async id => (await state()).library.documents.find(doc => doc.id === id);
 const preferences = (uiLocale, responseLanguage) => page.evaluate(values => window.swallow.setLanguagePreferences(values), { uiLocale, responseLanguage });
 const panel = () => page.locator('.source-translation:visible');
+const translationStatus = () => page.locator('.translation-status');
+const previousFromSource = name => page.locator('.study-turn').getByRole('button', { name, exact: true });
+const nextFromTranslation = name => page.locator('.source-translation + .study-actions').getByRole('button', { name, exact: true });
 const startStudy = () => page.locator('.study-start').getByRole('button').click();
 async function waitIdle() { await waitUntil(async () => !(await state()).busy, 'request completion'); }
 async function waitPassageTranslation(id, unitId, passageIndex, language) {
@@ -160,7 +164,13 @@ try {
   const firstPassage = studyPassage(original, workspace.session);
   await panel().waitFor();
   assert.equal(await panel().getByRole('combobox', { name: ko('translation.targetLanguage'), exact: true }).inputValue(), 'ko');
+  holdNextTranslation = true;
   await panel().getByRole('button', { name: ko('translation.current'), exact: true }).click();
+  await translationStatus().getByText('현재 구간 번역 중…', { exact: false }).waitFor({ timeout: 3000 });
+  assert.equal(await panel().getByRole('button', { name: '현재 구간 번역 중…', exact: true }).isDisabled(), true);
+  await waitUntil(() => !!heldResponse, 'held current passage response');
+  heldResponse.release();
+  await translationStatus().getByText('번역 초안 저장됨', { exact: true }).waitFor();
   await waitPassageTranslation(id, firstUnit.id, 0, 'ko');
   const korean = (await document(id)).passageTranslations[firstUnit.id][0].ko;
   assertTranslation(korean.text, 'ko');
@@ -168,8 +178,7 @@ try {
   assert.ok(korean.text.includes('`sum = a + b`')); assert.ok(korean.text.includes('E = mc²'));
   assert.equal(korean.sourceText, firstPassage); assert.equal(korean.targetLanguage, 'ko');
   assert.equal(korean.identity.responseLanguage, 'ko');
-  assert.equal((await panel().locator('.translation-current td:first-child p').allTextContents()).join(''), firstPassage);
-  assert.equal((await panel().locator('.translation-current p[lang="ko"]').allTextContents()).join(''), korean.text);
+  assert.equal(await panel().locator('.translation-current .translation-text').textContent(), korean.text);
   assert.equal(await answer.inputValue(), '번역 중에도 유지할 사용자 답변 초안');
 
   await panel().getByRole('combobox', { name: ko('translation.targetLanguage'), exact: true }).selectOption('en');
@@ -187,7 +196,7 @@ try {
     });
   });
   await panel().getByRole('button', { name: ko('translation.document'), exact: true }).click();
-  await panel().locator('.translation-progress').waitFor();
+  await translationStatus().getByText('전체 자료 번역 중…', { exact: false }).waitFor();
   await waitUntil(async () => {
     const current = await state(); const doc = current.library.documents.find(doc => doc.id === id);
     return !current.busy && doc.units.every(unit => !!doc.translations?.[unit.id]?.ko);
@@ -212,10 +221,12 @@ try {
 
   // Hold the next whole-unit response until cancellation, then send a late reply.
   await panel().getByRole('combobox', { name: ko('translation.targetLanguage'), exact: true }).selectOption('en');
+  heldResponse = undefined;
   holdNextTranslation = true;
   await panel().getByRole('button', { name: ko('translation.document'), exact: true }).click();
   await waitUntil(() => !!heldResponse, 'held translation response');
-  await panel().getByRole('button', { name: ko('translation.cancel'), exact: true }).click();
+  await translationStatus().getByRole('button', { name: ko('translation.cancel'), exact: true }).click();
+  await page.locator('.notice-bar').getByText(ko('public.translationCancelled'), { exact: true }).waitFor();
   await waitIdle();
   const cancelled = await document(id);
   assert.deepEqual(cancelled.passageTranslations[firstUnit.id][0], both);
@@ -246,22 +257,21 @@ try {
   await startStudy();
   const beforeNumeric = translationChats().length;
   const currentButton = panel().getByRole('button', { name: en('translation.current'), exact: true });
-  const currentSource = panel().locator('.translation-current .translation-comparison p').first();
+  const currentDraft = () => panel().locator('.translation-current .translation-text');
   await currentButton.click();
   await waitPassageTranslation(numericId, 'unit-0', 0, 'ko');
-  assert.equal(await currentSource.textContent(), numericSource.slice(0, 420));
+  assert.match(await currentDraft().textContent(), /ONLY_CURRENT_PASSAGE/);
   assert.equal(translationChats().slice(beforeNumeric).some(request => request.payload.source.includes('NEXT_PASSAGE')), false);
   assert.equal(await panel().locator('.translation-numbers').count(), 0);
-  await page.getByRole('button', { name: en('reading.next'), exact: true }).click();
+  await nextFromTranslation(en('reading.next')).click();
   await panel().getByText(en('translation.noSavedCurrent'), { exact: true }).waitFor();
   await currentButton.click();
   await waitPassageTranslation(numericId, 'unit-0', 1, 'ko');
-  assert.equal(await currentSource.textContent(), numericSource.slice(420));
-  await panel().getByText(en('translation.numberMismatch'), { exact: true }).waitFor();
-  await panel().getByText(en('translation.numberSource', { values: '5 kg' }), { exact: true }).waitFor();
-  await panel().getByText(en('translation.numberDraft', { values: '7 g' }), { exact: true }).waitFor();
-  await page.getByRole('button', { name: en('study.previousPassage'), exact: true }).click();
-  await currentSource.filter({ hasText: 'ONLY_CURRENT_PASSAGE' }).waitFor();
+  const mismatch = currentDraft().locator('small.translation-numbers');
+  await mismatch.waitFor();
+  assert.match(await mismatch.getAttribute('title'), /5 kg.*7 g/);
+  await previousFromSource(en('study.previousPassage')).click();
+  await currentDraft().filter({ hasText: 'ONLY_CURRENT_PASSAGE' }).waitFor();
   assert.equal(await panel().locator('.translation-numbers').count(), 0);
 
   const wholeNumericSource = 'FIRST_TAKES 12 ms. SECOND_TAKES 15 ms. RATE_IS 30%. LIMIT_IS 12 ms.\n\n'
@@ -278,39 +288,113 @@ try {
   const numericDocument = await document(wholeNumericId);
   assert.ok(numericDocument.units.length > 1);
   assert.match(numericDocument.translations[numericDocument.units.at(-1).id].ko.text, /LAST_SECTION/);
-  const numericUnits = panel().locator('.translation-saved-unit');
-  assert.equal(await numericUnits.locator('tbody tr').count(), 0, 'collapsed units should defer sentence rows');
-  await numericUnits.first().locator('summary').click();
+  await currentDraft().waitFor();
+  assert.equal(await panel().locator('table, .translation-saved-unit').count(), 0);
+  assert.doesNotMatch(await currentDraft().textContent(), /LAST_SECTION/);
   const expectedWarnings = [
     ['FIRST_TAKES', '12 ms', '15 ms'], ['SECOND_TAKES', '15 ms', '12 ms'],
     ['RATE_IS', '30%', ko('translation.numberMissing')], ['LIMIT_IS', '12 ms', '12 s'],
   ];
-  for (const [source, original, draft] of expectedWarnings) {
-    const row = numericUnits.first().getByRole('row').filter({ hasText: source });
-    await row.getByText('수치 확인 필요', { exact: true }).waitFor();
-    await row.getByText(ko('translation.numberSource', { values: original }), { exact: true }).waitFor();
-    await row.getByText(ko('translation.numberDraft', { values: draft }), { exact: true }).waitFor();
+  const numericWarnings = currentDraft().locator('small.translation-numbers');
+  assert.equal(await numericWarnings.count(), expectedWarnings.length);
+  for (const [index, [, original, draft]] of expectedWarnings.entries()) {
+    const title = await numericWarnings.nth(index).getAttribute('title');
+    assert.ok(title.includes(ko('translation.numberSource', { values: original })));
+    assert.ok(title.includes(ko('translation.numberDraft', { values: draft })));
   }
-  assert.equal(await numericUnits.first().locator('.translation-numbers').count(), 4);
-  await numericUnits.last().locator('summary').click();
-  await numericUnits.last().getByText(/LAST_SECTION/).first().waitFor();
+  const numericRequests = translationChats().length;
+  const nextNumeric = nextFromTranslation(ko('reading.next'));
+  while (await nextNumeric.count()) {
+    const location = page.locator('.study-location');
+    const before = await location.textContent();
+    await nextNumeric.click();
+    await waitUntil(async () => await location.textContent() !== before, 'next translated passage');
+  }
+  await currentDraft().filter({ hasText: 'LAST_SECTION' }).waitFor();
+  assert.equal(translationChats().length, numericRequests);
   await preferences('en', 'ko');
 
   // PDF whole-document translation uses extraction/OCR text and skips empty pages.
   await page.evaluate(id => window.swallow.study({ type: 'select-document', documentId: id }), pdf.id);
   await startStudy();
   await panel().getByText(en('translation.pdfText'), { exact: true }).waitFor();
+  await page.clock.install();
+  heldResponse = undefined;
+  holdNextTranslation = true;
   await panel().getByRole('button', { name: en('translation.document'), exact: true }).click();
+  await waitUntil(() => !!heldResponse, 'held PDF translation');
+  const firstPdfResponse = heldResponse;
+  await translationStatus().getByText('0/2 completed', { exact: true }).waitFor();
+  assert.equal(await panel().getByRole('button', { name: 'Translating the whole document…', exact: true }).isDisabled(), true);
+  await page.clock.fastForward(31_000);
+  await translationStatus().getByText(/Translation is taking a while/).waitFor();
+  const nextPdf = page.locator('.study-turn').getByRole('button', { name: en('reading.next'), exact: true });
+  assert.equal(await nextPdf.isEnabled(), true);
+  await nextPdf.click();
+  assert.equal((await state()).busy?.translationScope, 'document');
+  assert.equal((await page.evaluate(id => window.swallow.getStudyWorkspace(id), pdf.id)).session.unitId, 'unit-1');
+  await previousFromSource(en('study.previousPassage')).click();
+  assert.equal((await state()).busy?.translationScope, 'document');
+  assert.equal((await page.evaluate(id => window.swallow.getStudyWorkspace(id), pdf.id)).session.unitId, 'unit-0');
+  await nextPdf.click();
+  assert.equal((await page.evaluate(id => window.swallow.getStudyWorkspace(id), pdf.id)).session.unitId, 'unit-1');
+  holdNextTranslation = true;
+  firstPdfResponse.release();
+  await waitUntil(() => heldResponse !== firstPdfResponse, 'held second PDF response');
+  await translationStatus().getByText('1/2 completed', { exact: true }).waitFor();
+  heldResponse.release();
   await waitUntil(async () => {
     const current = await state(); const doc = current.library.documents.find(doc => doc.id === pdf.id);
     return !current.busy && !!doc.translations?.['unit-0']?.ko && !!doc.translations?.['unit-1']?.ko;
   }, 'PDF text/OCR translations');
+  await currentDraft().filter({ hasText: 'PDF_OCR_FIXTURE' }).waitFor();
+  assert.doesNotMatch(await currentDraft().textContent(), /PDF_TEXT_FIXTURE/);
+  await previousFromSource(en('study.previousPassage')).click();
+  await currentDraft().filter({ hasText: 'PDF_TEXT_FIXTURE' }).waitFor();
+  assert.doesNotMatch(await currentDraft().textContent(), /PDF_OCR_FIXTURE/);
   const translatedPdf = await document(pdf.id);
   assert.equal(translatedPdf.translations['unit-2'], undefined);
   assert.deepEqual(unchangedDocumentFields(translatedPdf), pdf);
   assert.ok(translationChats().some(request => request.payload.source.includes('PDF_TEXT_FIXTURE')));
   assert.ok(translationChats().some(request => request.payload.source.includes('PDF_OCR_FIXTURE')));
   assert.equal(translationChats().some(request => request.payload.source.includes('[추출된 텍스트 없음')), false);
+
+  await page.evaluate(id => window.swallow.study({ type: 'select-document', documentId: id }), id);
+  await page.getByRole('button', { name: en('study.legacy'), exact: true }).click();
+  const recall = 'Save this recall while the document is translating.';
+  await page.locator('.recall-input').fill(recall);
+  await panel().getByRole('combobox', { name: en('translation.targetLanguage'), exact: true }).selectOption('en');
+  heldResponse = undefined;
+  holdNextTranslation = true;
+  await panel().getByRole('button', { name: en('translation.document'), exact: true }).click();
+  await waitUntil(() => !!heldResponse, 'held free-reading translation');
+  const pagination = page.locator('.reading-pagination');
+  await pagination.getByRole('button', { name: en('reading.next'), exact: true }).click();
+  assert.equal((await state()).busy?.translationScope, 'document');
+  await waitUntil(async () => (await document(id)).position === 1, 'next free-reading unit');
+  await pagination.getByRole('button', { name: en('reading.previous'), exact: true }).click();
+  await waitUntil(async () => (await document(id)).position === 0, 'previous free-reading unit');
+  assert.equal((await state()).busy?.translationScope, 'document');
+  assert.equal((await document(id)).recalls[firstUnit.id].answer, recall);
+  await translationStatus().getByRole('button', { name: en('translation.cancel'), exact: true }).click();
+  await waitIdle();
+  heldResponse.release();
+  await waitUntil(() => heldResponse.attempted, 'free-reading response released');
+  await page.evaluate(id => window.swallow.study({ type: 'select-document', documentId: id }), pdf.id);
+
+  const pdfRequests = translationChats().length;
+  await closeApp(); await launch();
+  await startStudy();
+  assert.equal(await currentDraft().isVisible(), false);
+  await panel().locator('.translation-saved > summary').click();
+  await currentDraft().filter({ hasText: 'PDF_TEXT_FIXTURE' }).waitFor();
+  await nextFromTranslation(en('reading.next')).click();
+  await currentDraft().filter({ hasText: 'PDF_OCR_FIXTURE' }).waitFor();
+  await panel().getByRole('combobox', { name: en('translation.targetLanguage'), exact: true }).selectOption('en');
+  await panel().getByText(en('translation.noSavedCurrent'), { exact: true }).waitFor();
+  await panel().getByRole('combobox', { name: en('translation.targetLanguage'), exact: true }).selectOption('ko');
+  await currentDraft().filter({ hasText: 'PDF_OCR_FIXTURE' }).waitFor();
+  assert.equal(translationChats().length, pdfRequests);
   await page.evaluate(id => window.swallow.study({ type: 'select-document', documentId: id }), id);
   await startStudy();
   const persisted = await document(id); const beforeRestartCount = translationChats().length;
@@ -320,20 +404,18 @@ try {
   assert.deepEqual((await document(id)).passageTranslations, persisted.passageTranslations);
   assert.equal((await document(id)).source, source);
   await startStudy();
+  await panel().locator('.translation-saved > summary').click();
   await panel().locator('.translation-current p[lang="ko"]').first().waitFor();
   assert.equal(await panel().getByRole('button', { name: en('translation.current'), exact: true }).isDisabled(), true);
-  await panel().locator('.translation-saved > summary').click();
-  assert.equal(await panel().locator('.translation-saved-unit').count(), original.units.length);
-  await panel().locator('.translation-saved-unit > summary').first().click();
+  await panel().getByText(en('translation.savedDocument', { count: original.units.length, total: original.units.length }), { exact: true }).waitFor();
   assert.equal(await panel().locator('.translation-current .translation-review-status').innerText(), en('translation.reviewStatus'));
-  assert.equal(await panel().locator('.translation-saved-unit .translation-review-status').first().innerText(), en('translation.reviewStatus'));
   assert.equal(requests.filter(request => request.body?.format?.properties?.verdict).length, 0, 'draft generation must not ask for semantic approval');
   assert.equal(await page.locator('.study-answer').inputValue(), '번역 중에도 유지할 사용자 답변 초안');
   assert.equal(translationChats().length, beforeRestartCount, 'saved translations must be readable while disconnected');
   await panel().locator('h3').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(artifacts, 'translation-ui.png') });
   assert.deepEqual(fixtureErrors, []); assert.deepEqual(errors, []);
-  console.log('Translation Electron UI passed: current passage isolation, whole-document continuation, sentence-level numeric omissions/unit changes/swaps, ko/en storage, cancellation, PDF text/OCR/empty-page handling, and disconnected restart reading. No real AI/account calls.');
+  console.log('Translation Electron UI passed: visible request status and elapsed time, completion/cancellation, bidirectional guided/free reading while translating, current passage isolation, numeric checks, ko/en storage, PDF text/OCR, and disconnected restart. No real AI/account calls.');
   console.log('Screenshot: ' + join(artifacts, 'translation-ui.png'));
   console.log('Synthetic data directory: ' + data);
 } catch (error) {

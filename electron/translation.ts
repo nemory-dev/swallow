@@ -4,7 +4,7 @@ import { PublicError, toPublicError } from '../src/shared/public-errors.js';
 import { checkOutputLanguage } from './ai-quality.js';
 import { protectTranslationLiterals } from './translation-literals.js';
 
-export const TRANSLATION_REVISION = 7;
+export const TRANSLATION_REVISION = 8;
 const MAX_PART_LENGTH = 1800;
 // A fully escaped JSON string can require six characters per translated character.
 const MAX_RESPONSE_LENGTH = 12_000;
@@ -61,15 +61,15 @@ export class SourceTranslator {
   async translate(source: string, language: ResponseLanguage, model: string, signal: AbortSignal): Promise<string> {
     return (await this.generateDraft(source, language, model, signal, false)).text;
   }
-  translateDraft(source: string, language: ResponseLanguage, model: string, signal: AbortSignal): Promise<Pick<SourceTranslation, 'text' | 'sentenceEnds'>> {
-    return this.generateDraft(source, language, model, signal, true);
+  translateDraft(source: string, language: ResponseLanguage, model: string, signal: AbortSignal, passages?: readonly string[]): Promise<Pick<SourceTranslation, 'text' | 'sentenceEnds'>> {
+    return this.generateDraft(source, language, model, signal, true, passages);
   }
-  private async generateDraft(source: string, language: ResponseLanguage, model: string, signal: AbortSignal, alignSentences: boolean): Promise<Pick<SourceTranslation, 'text' | 'sentenceEnds'>> {
+  private async generateDraft(source: string, language: ResponseLanguage, model: string, signal: AbortSignal, alignSentences: boolean, passages?: readonly string[]): Promise<Pick<SourceTranslation, 'text' | 'sentenceEnds'>> {
     if (language !== 'ko' && language !== 'en' || typeof model !== 'string' || !model.trim() || model.length > 200
       || typeof source !== 'string' || source.length > MAX_TRANSLATION_LENGTH) throw new PublicError('public.translationInvalid');
     if (!source.trim()) throw new PublicError('public.translationEmpty');
     if (signal.aborted) throw new PublicError('public.translationCancelled');
-    const protectedSource = protectTranslationLiterals(source, alignSentences);
+    const protectedSource = protectTranslationLiterals(source, alignSentences, passages);
     const finishDraft = (translated: string) => {
       if (!alignSentences) return { text: protectedSource.restore(translated) };
       const originalSentences = protectedSource.sentences(protectedSource.text);

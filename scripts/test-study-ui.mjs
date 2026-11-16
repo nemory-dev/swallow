@@ -8,6 +8,7 @@ import { LibraryStore } from '../dist-electron/electron/library.js';
 import { studyPassage } from '../dist-electron/src/learning/session.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const packagedApp = process.argv[2];
 const modulePath = process.env.SWALLOW_PLAYWRIGHT_MODULE;
 let electron;
 try { ({ _electron: electron } = await import(modulePath ? pathToFileURL(modulePath).href : 'playwright')); }
@@ -24,7 +25,7 @@ let speechResult = '음성이 설치되지 않아 듣기 검증 생략';
 async function launch() {
   const env = { ...process.env, SWALLOW_DATA_DIR: data };
   delete env.SWALLOW_DEV_URL;
-  const app = await electron.launch({ executablePath: electronPath, args: ['.'], cwd: projectRoot, env, timeout: 30000 });
+  const app = await electron.launch({ executablePath: packagedApp ? join(packagedApp, 'Contents/MacOS/Swallow') : electronPath, args: packagedApp ? [] : ['.'], cwd: projectRoot, env, timeout: 30000 });
   let page;
   try {
     page = await app.firstWindow();
@@ -187,21 +188,37 @@ await usingApp(async page => {
 let offlineDocumentId, offlinePosition;
 const offlineWorkspace = page => page.evaluate(id => window.swallow.getStudyWorkspace(id), offlineDocumentId);
 await usingApp(async page => {
-  await page.evaluate(() => window.swallow.addDocument({ title: '원문만 읽기', source: '첫 구간입니다. '.padEnd(420, '가') + '마지막 구간입니다.', goal: '' }));
+  const freeReading = page.getByRole('button', { name: '자유 읽기', exact: true });
+  const guidedStudy = page.getByRole('button', { name: '같이 공부하기', exact: true });
+  const styledAsButton = button => button.evaluate(element => {
+    const style = getComputedStyle(element);
+    return style.borderTopStyle === 'solid' && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && element.getBoundingClientRect().height >= 38;
+  });
+  assert.equal(await styledAsButton(freeReading), true);
+  await freeReading.click();
+  assert.equal(await styledAsButton(guidedStudy), true);
+  await guidedStudy.click();
+  await freeReading.waitFor();
+  const firstSentence = '첫 구간의 본문을 이어서 설명하는 내용입니다 '.repeat(14).trimEnd() + '. ';
+  const lastSentence = '마지막 구간까지 이어지는 문장입니다 ' + '다음 화면에서만 읽을 내용입니다 '.repeat(6).trimEnd() + '.';
+  await page.evaluate(source => window.swallow.addDocument({ title: '원문만 읽기', source, goal: '' }), firstSentence + lastSentence);
   offlineDocumentId = (await page.evaluate(() => window.swallow.getState())).library.activeDocumentId;
   await page.getByRole('button', { name: '공부 시작', exact: true }).click();
-  await page.locator('.study-original > summary').click();
-  assert.match(await page.locator('.study-source').innerText(), /첫 구간입니다/);
-  const before = await offlineWorkspace(page);
   const nextPassage = page.getByRole('button', { name: '다음 구간 →', exact: true });
-  const previousPassage = page.getByRole('button', { name: '← 이전 구간', exact: true });
+  const nextFromSource = page.locator('.study-turn').getByRole('button', { name: '다음 구간 →', exact: true });
+  await nextFromSource.waitFor({ timeout: 3000 });
+  assert.equal(await nextPassage.count(), 2);
+  await page.locator('.study-original > summary').click();
+  assert.equal(await page.locator('.study-source').textContent(), firstSentence);
+  const before = await offlineWorkspace(page);
+  const previousPassage = page.locator('.study-turn').getByRole('button', { name: '← 이전 구간', exact: true });
   const lastPassage = page.getByText('마지막 구간이에요', { exact: true });
   assert.equal(await previousPassage.count(), 0);
   assert.equal(await lastPassage.count(), 0);
-  await nextPassage.click();
+  await nextFromSource.click();
   await lastPassage.waitFor();
   assert.equal(await nextPassage.count(), 0);
-  assert.match(await page.locator('.study-source').innerText(), /마지막 구간입니다/);
+  assert.equal(await page.locator('.study-source').textContent(), lastSentence);
   const after = await offlineWorkspace(page);
   offlinePosition = location(after.session);
   assert.notEqual(offlinePosition, location(before.session));
@@ -210,7 +227,7 @@ await usingApp(async page => {
   assert.deepEqual(after.notes, []);
   await previousPassage.click();
   await previousPassage.waitFor({ state: 'hidden' });
-  assert.match(await page.locator('.study-source').innerText(), /첫 구간입니다/);
+  assert.equal(await page.locator('.study-source').textContent(), firstSentence);
   assert.equal(await lastPassage.count(), 0);
   const returned = await offlineWorkspace(page);
   assert.equal(location(returned.session), location(before.session));
@@ -222,7 +239,7 @@ await usingApp(async page => {
   await page.getByRole('button', { name: '이어하기', exact: true }).click();
   await page.getByRole('button', { name: '한 가지 질문에 답해보기 →', exact: true }).waitFor();
   assert.notEqual(location((await offlineWorkspace(page)).session), offlinePosition);
-  await page.getByRole('button', { name: '다음 구간 →', exact: true }).click();
+  await page.locator('.source-translation + .study-actions').getByRole('button', { name: '다음 구간 →', exact: true }).click();
   await page.getByText('마지막 구간이에요', { exact: true }).waitFor();
   assert.equal(location((await offlineWorkspace(page)).session), offlinePosition);
 });

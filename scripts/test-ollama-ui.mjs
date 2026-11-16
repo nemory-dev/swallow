@@ -78,7 +78,7 @@ try {
   await page.getByRole('button', { name: '짧게 설명해줘', exact: true }).click();
   await page.getByText('시험 서버의 로컬 학습 설명입니다.', { exact: true }).waitFor();
   const beforeSkip = await page.evaluate(id => window.swallow.getStudyWorkspace(id), state.library.activeDocumentId);
-  await page.getByRole('button', { name: '다음 구간 →', exact: true }).click();
+  await page.locator('.study-turn').getByRole('button', { name: '다음 구간 →', exact: true }).click();
   await page.locator('.study-explanation').waitFor({ state: 'hidden' });
   const afterSkip = await page.evaluate(id => window.swallow.getStudyWorkspace(id), state.library.activeDocumentId);
   assert.notDeepEqual([afterSkip.session.unitId, afterSkip.session.passageIndex], [beforeSkip.session.unitId, beforeSkip.session.passageIndex]);
