@@ -1,6 +1,7 @@
 import { sameAIIdentity } from '../src/shared/ai-identity.js';
 import { validateResponseLanguage } from '../src/shared/ai-identity.js';
 import { validateTranslationScope } from '../src/learning/translation.js';
+import { readingPassages } from '../src/learning/reading.js';
 import { unitPage } from '../src/learning/pdf.js';
 import { SourceTranslator, TRANSLATION_REVISION } from './translation.js';
 import type { AIResultIdentity, ResponseLanguage, TranslationScope, SourceTranslation, CoachProvider } from '../src/shared/types.js';
@@ -120,7 +121,7 @@ export class AppService {
     const generation = this.connectionGeneration, attempt = this.requestGeneration;
     const controller = new AbortController(); this.studyController = controller;
     const request: NonNullable<AppState['busy']> = { kind: 'translation', documentId, unitId: units[0]!.id,
-      startedAt: new Date().toISOString(), targetLanguage, progress: { completed: 0, total: units.length } };
+      startedAt: new Date().toISOString(), targetLanguage, translationScope: scope, progress: { completed: 0, total: units.length } };
     const ensureCurrent = () => {
       if (controller.signal.aborted) throw new PublicError('public.translationCancelled');
       if (generation !== this.connectionGeneration || attempt !== this.requestGeneration || this.state.library.activeDocumentId !== documentId
@@ -134,7 +135,7 @@ export class AppService {
         const current = getDocument(this.state.library, documentId);
         const cached = (session ? current.passageTranslations?.[unit.id]?.[session.passageIndex] : current.translations?.[unit.id])?.[targetLanguage];
         if (!(cached?.sourceText === unit.text && cached.model === model && sameAIIdentity(cached.identity, identity))) {
-          const draft = await this.translator.translateDraft(unit.text, targetLanguage, model, controller.signal);
+          const draft = await this.translator.translateDraft(unit.text, targetLanguage, model, controller.signal, session ? undefined : readingPassages(unit.text, doc.passageVersion ?? 1));
           ensureCurrent();
           const result: SourceTranslation = { ...draft, sourceText: unit.text, targetLanguage, model, identity, createdAt: new Date().toISOString() };
           try {
@@ -166,8 +167,12 @@ export class AppService {
     }
   }
   async study(action: StudyAction) { return this.withContextTransition(() => this.studyInContext(action)); }
+  private translatingDocument(documentId: string): boolean {
+    const busy = this.state.busy;
+    return busy?.kind === 'translation' && busy.translationScope === 'document' && busy.documentId === documentId;
+  }
   private async studyInContext(action: StudyAction) {
-    if (action?.type === 'select-unit') this.cancelRequest();
+    if (action?.type === 'select-unit' && !this.translatingDocument(action.documentId)) this.cancelRequest();
     if (action?.type === 'select-document') {
       this.cancelRequest(); this.state.library = await this.store.select(action.documentId);
       this.refreshMetadata(); this.publish(); return;
@@ -177,7 +182,8 @@ export class AppService {
       this.cancelRequest();
     }
     if (this.state.busy && action && 'documentId' in action && this.state.busy.documentId === action.documentId &&
-      (action.type === 'delete-document' || action.type === 'save-recall' || action.type === 'rate-recall' || action.type === 'save-pdf-note')) this.cancelRequest();
+      (action.type === 'delete-document' || action.type === 'rate-recall' || action.type === 'save-pdf-note'
+        || (action.type === 'save-recall' && !this.translatingDocument(action.documentId)))) this.cancelRequest();
     await this.update(library => applyStudyAction(library, action));
   }
   async createFolder(name: string) { const folder = await this.store.createFolder(name); this.refreshMetadata(); this.publish(); return folder; }
@@ -200,7 +206,7 @@ export class AppService {
       const evidence = this.store.evidence(action.term.reference, 6000);
       if (action.term.kind === 'source' && (!action.term.quote || !evidence.text.includes(action.term.quote))) throw new Error('용어 메모의 인용이 원문에 없습니다. 다시 검색하세요.');
     }
-    this.cancelRequest();
+    if (!(['next', 'previous'].includes(action.type) && this.translatingDocument(action.documentId))) this.cancelRequest();
     await this.store.updateStudySession(action.documentId, (session, doc, reference) => {
       if (action.type === 'start') return session ?? createStudySession(doc, reference.sourceHash, undefined, this.responseLanguage());
       if (!session) throw new Error('먼저 공부 시작을 눌러 주세요.');

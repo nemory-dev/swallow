@@ -78,7 +78,7 @@ function requireAnswer(session: Pick<StudySession, 'answer' | 'unknown'>) {
 }
 function readableLocation(doc: StudyDocument, startUnit: number, startPassage: number, direction: 1 | -1 = 1): { unitId: string; passageIndex: number } | undefined {
   for (let unitIndex = startUnit; unitIndex >= 0 && unitIndex < doc.units.length; unitIndex += direction) {
-    const unit = doc.units[unitIndex]!, passages = readingPassages(unit.text);
+    const unit = doc.units[unitIndex]!, passages = readingPassages(unit.text, doc.passageVersion ?? 1);
     const start = unitIndex === startUnit ? startPassage : direction === 1 ? 0 : passages.length - 1;
     for (let passageIndex = start; passageIndex >= 0 && passageIndex < passages.length; passageIndex += direction) {
       if (passages[passageIndex]!.trim()) return { unitId: unit.id, passageIndex };
@@ -106,7 +106,7 @@ export function studyPassage(doc: StudyDocument, session: Pick<StudySession, 'do
   if (session.documentId !== doc.id) throw new Error('학습 자료가 세션과 다릅니다.');
   const unit = getUnit(doc, session.unitId);
   if (!Number.isInteger(session.passageIndex) || session.passageIndex < 0) throw new Error('읽기 구간이 잘못되었습니다.');
-  const passage = readingPassages(unit.text)[session.passageIndex];
+  const passage = readingPassages(unit.text, doc.passageVersion ?? 1)[session.passageIndex];
   if (passage === undefined) throw new Error('읽기 구간이 원문 범위를 벗어났습니다.');
   return passage;
 }

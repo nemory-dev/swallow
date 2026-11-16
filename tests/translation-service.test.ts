@@ -10,6 +10,7 @@ import { localProvider } from './helpers/local-provider.js';
 import { pdfSource } from '../src/learning/pdf.js';
 import { studyPassage } from '../src/learning/session.js';
 import { translationSentencePairs, compareTranslationNumbers } from '../src/learning/translation.js';
+import { readingPassages } from '../src/learning/reading.js';
 import type { CoachRequest } from '../src/shared/types.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -35,6 +36,34 @@ async function setup(source = 'Technical documents keep `config.json` and https:
   return { service, store, client, calls, id, document, path };
 }
 describe('원문 번역 서비스와 저장', () => {
+  it('전체 번역을 취소하지 않고 앞뒤로 이동하며 긴 한 문장도 읽기 구간 경계에 맞춰 저장한다', async () => {
+    const source = 'A'.repeat(419) + 'B'.repeat(390) + '.';
+    const { service, client, id, document } = await setup(source);
+    const first = (await service.studySession({ type: 'start', documentId: id })).session!;
+    const respond = client.streamResponse.bind(client);
+    let release!: () => void, started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    client.streamResponse = async request => { started(); await gate; return respond(request); };
+    const pending = service.translateDocument(id, 'en', 'document');
+    const completed = pending.catch((error: unknown) => error);
+    try {
+      await entered;
+      const next = (await service.studySession({ type: 'next', documentId: id })).session!;
+      expect(next.passageIndex).toBe(first.passageIndex + 1);
+      expect(service.getState().busy?.kind).toBe('translation');
+      await service.studySession({ type: 'previous', documentId: id });
+      await service.study({ type: 'save-recall', documentId: id, unitId: first.unitId, answer: '이동 전에 저장한 답안' });
+      await service.study({ type: 'select-unit', documentId: id, position: 0 });
+      expect(service.getState().busy?.kind).toBe('translation');
+    } finally { release(); }
+    expect(await completed).toBeUndefined();
+    const draft = document().translations![first.unitId]!.en!;
+    expect(document().recalls[first.unitId]?.answer).toBe('이동 전에 저장한 답안');
+    const boundary = readingPassages(source)[0]!.length;
+    expect(draft.sentenceEnds?.map(item => item.sourceEnd)).toContain(boundary);
+    expect(service.getStudyWorkspace(id).session?.passageIndex).toBe(first.passageIndex);
+  });
   it('구간 번역을 별도 저장하고 원문·회상·학습 세션을 보존하며 언어별 캐시를 재사용한다', async () => {
     const { service, id, document, calls } = await setup();
     await service.study({ type: 'save-recall', documentId: id, unitId: 'unit-0', answer: '내 답안' });
@@ -233,7 +262,7 @@ describe('원문 번역 서비스와 저장', () => {
     await service.refreshOllama();
     let finish: ((result: { text: string }) => void) | undefined;
     client.streamResponse = () => new Promise(resolve => { finish = resolve; });
-    const pending = service.translateDocument(id, 'ko', 'document');
+    const pending = service.translateDocument(id, 'ko', operation === 'select-unit' ? 'unit' : 'document');
     const rejected = expect(pending).rejects.toThrow();
     while (!finish) await new Promise(resolve => setTimeout(resolve, 1));
     await expect(service.translateDocument(id, 'en', 'unit')).rejects.toThrow();

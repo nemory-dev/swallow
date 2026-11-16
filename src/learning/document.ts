@@ -49,6 +49,7 @@ export function createDocument(input: AddDocumentInput, options: { id?: string; 
     ...(pdf ? { pdf: structuredClone(pdf) } : {}),
     id: options.id ?? crypto.randomUUID(), title, source: input.source, goal: input.goal.trim(),
     createdAt: options.now ?? new Date().toISOString(), units: pdf ? splitPdfSource(input.source, pdf.pages) : splitSource(input.source),
+    passageVersion: 2,
     position: 0, readUnitIds: [], guides: {}, recalls: {},
     ...(input.sourceUrl === undefined ? {} : { sourceUrl: validateSourceUrl(input.sourceUrl) }),
   };
@@ -143,8 +144,9 @@ export function validateLibrary(raw: unknown): LibraryState {
     date(doc.createdAt);
     const pdf = doc.pdf === undefined ? undefined : validatePdf(doc.pdf, source);
     const expected = pdf ? splitPdfSource(source, pdf.pages) : splitSource(source);
+    if (doc.passageVersion !== undefined && doc.passageVersion !== 2) throw new Error('지원하지 않는 읽기 구간 규칙입니다.');
     if (doc.translations !== undefined) validateTranslations(doc.translations, expected);
-    if (doc.passageTranslations !== undefined) validatePassageTranslations(doc.passageTranslations, expected);
+    if (doc.passageTranslations !== undefined) validatePassageTranslations(doc.passageTranslations, expected, doc.passageVersion ?? 1);
     if (JSON.stringify(doc.units) !== JSON.stringify(expected)) throw new Error('저장된 읽기 단위가 원문과 다릅니다.');
     if (!Number.isInteger(doc.position) || (doc.position as number) < 0 || (doc.position as number) >= expected.length) throw new Error('저장된 읽기 위치가 잘못되었습니다.');
     const unitIds = new Set(expected.map(unit => unit.id));

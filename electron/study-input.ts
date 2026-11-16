@@ -5,7 +5,7 @@ import { getUnit } from '../src/learning/document.js';
 /** Keep original offsets and PDF page boundaries while sending one small passage. */
 export function studyInputDocument(doc: StudyDocument, session: StudySession): { document: StudyDocument; previousContext: string } {
   const unit = getUnit(doc, session.unitId);
-  const passages = readingPassages(unit.text);
+  const passages = readingPassages(unit.text, doc.passageVersion ?? 1);
   const text = passages[session.passageIndex];
   if (text === undefined) throw new Error('학습 위치가 원문과 다릅니다. 다시 시작해 주세요.');
   const offset = passages.slice(0, session.passageIndex).join('').length;

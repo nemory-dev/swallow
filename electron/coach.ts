@@ -115,7 +115,7 @@ export class StudyCoach {
 const schemaText = (maxLength: number) => ({ type: 'string', minLength: 1, maxLength });
 const schemaObject = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 export function coachSchema(kind: Kind, guided = false, source?: string, language: ResponseLanguage = 'ko'): Record<string, unknown> {
-  const quotes = source === undefined ? {} : { enum: readingPassages(source).filter(part => part.trim()) };
+  const quotes = source === undefined ? {} : { enum: readingPassages(source, 1).filter(part => part.trim()) };
   return kind === 'guide' ? schemaObject({
     overview: schemaText(guided ? 700 : 2000),
     keyPoints: { type: 'array', minItems: 1, maxItems: guided ? 2 : 4, items: schemaObject({ title: schemaText(150), explanation: schemaText(guided ? 700 : 2000), quote: { ...schemaText(800), ...quotes } }) },

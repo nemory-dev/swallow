@@ -10,6 +10,7 @@ import { AddDocumentDialog } from './AddDocumentDialog.js';
 import { PdfReader, VisualEvidenceList } from './PdfReader.js';
 import { ReadingContent } from './ReadingContent.js';
 import { SourceTranslationPanel } from './SourceTranslationPanel.js';
+import { TranslationStatus } from './TranslationStatus.js';
 import { LibraryTools } from './LibraryTools.js';
 import { UpdateSettings } from './UpdateSettings.js';
 import { saveAndInstallUpdate } from './update-install.js';
@@ -17,7 +18,7 @@ import { UpdatePreparationContext } from './update-preparation.js';
 import { assertStudyDraftsForUpdate, clearStudyDrafts, StudyFlow } from './StudyFlow.js';
 import { ChatGPTSettings, ChatGPTWelcome, ChatGPTUsage } from './ChatGPTSettings.js';
 import { isOllamaModel, aiUnavailableReason, pdfAIBlocked, modelListed, OLLAMA_PROTOCOL_VERSIONS } from '../shared/ai.js';
-import type { AddDocumentInput, AppState, Rating, PdfImportState, ReadingUnit, StudyDocument, SwallowBridge } from '../shared/types.js';
+import type { AddDocumentInput, AppState, Rating, PdfImportState, ReadingUnit, ResponseLanguage, StudyDocument, SwallowBridge, TranslationScope } from '../shared/types.js';
 
 const DRAFT_KEY = 'swallow.recall-drafts.v1';
 type Draft = { answer: string; baseSavedAt: string | null };
@@ -115,6 +116,11 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
   const [folderEditing, setFolderEditing] = useState(false);
   const [operationPending, setPending] = useState(false);
   const [flowPending, setFlowPending] = useState(false);
+  const [requestedTranslation, setRequestedTranslation] = useState<{
+    documentId: string; targetLanguage: ResponseLanguage; scope: TranslationScope; startedAt: number;
+  } | null>(null);
+  const [translationSavedAt, setTranslationSavedAt] = useState<number | null>(null);
+  const translationLock = useRef(false);
   const updatePreparations = useRef(new Set<() => Promise<void>>());
   const [legacy, setLegacy] = useState(false);
   const pending = operationPending || flowPending;
@@ -124,7 +130,7 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
   const draftsRef = useRef(draftStore);
   const readerRef = useRef<HTMLElement>(null);
   const [clockTick, setClockTick] = useState(0);
-  const updateBlocked = flowPending || !!state?.busy || adding || folderEditing || importState.status !== 'idle';
+  const updateBlocked = flowPending || !!requestedTranslation || !!state?.busy || adding || folderEditing || importState.status !== 'idle';
   const updateBlockedRef = useRef(updateBlocked); updateBlockedRef.current = updateBlocked;
   async function installUpdate() {
     if (pendingRef.current || updateBlockedRef.current) throw new Error(t('errors.updateBlocked'));
@@ -172,6 +178,12 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
   void clockTick;
 
   useEffect(() => { setHiddenSource(false); readerRef.current?.scrollTo({ top: 0 }); }, [activeDocument?.id, unit?.id]);
+
+  useEffect(() => {
+    if (translationSavedAt === null) return;
+    const timer = window.setTimeout(() => setTranslationSavedAt(null), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [translationSavedAt]);
 
   useEffect(() => {
     if (!state || (!draftStore.error && !draftStore.blocked)) return;
@@ -225,6 +237,18 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
   }
   const run = (operation: () => Promise<void>) => { void perform(operation); };
   const launch = (operation: () => Promise<void>) => { setError(null); void operation().catch(cause => setError(errorMessage(cause))); };
+  const startTranslation: SwallowBridge['translateDocument'] = async (documentId, targetLanguage, scope, unitId, passageIndex) => {
+    if (translationLock.current || pendingRef.current || state?.busy) return;
+    translationLock.current = true;
+    setRequestedTranslation({ documentId, targetLanguage, scope, startedAt: Date.now() });
+    setTranslationSavedAt(null);
+    setError(null);
+    try {
+      await bridge.translateDocument(documentId, targetLanguage, scope, unitId, passageIndex);
+      setTranslationSavedAt(Date.now());
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { translationLock.current = false; setRequestedTranslation(null); }
+  };
   const goToDocument = (documentId: string) => run(async () => { await saveDraft(); await bridge.study({ type: 'select-document', documentId }); setLegacy(false); });
   const goToUnit = (position: number) => {
     if (!activeDocument) return;
@@ -242,6 +266,23 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
   const aiDisabledReason = rawAiDisabledReason ? localizeText(rawAiDisabledReason) : null;
   const aiAvailable = aiDisabledReason === null;
   const activeBusy = state.busy && state.busy.documentId === activeDocument?.id && state.busy.unitId === unit?.id ? state.busy : null;
+  const translationBusy = state.busy?.kind === 'translation' ? state.busy : null;
+  const translationActivity = requestedTranslation ? {
+    ...requestedTranslation,
+    progress: translationBusy?.documentId === requestedTranslation.documentId ? translationBusy.progress : undefined,
+  } : translationBusy && {
+    documentId: translationBusy.documentId,
+    scope: translationBusy.translationScope ?? 'unit' as const,
+    startedAt: Date.parse(translationBusy.startedAt),
+    targetLanguage: translationBusy.targetLanguage,
+    progress: translationBusy.progress,
+  };
+  const translation = {
+    pendingScope: translationActivity?.documentId === activeDocument?.id ? translationActivity?.scope : undefined,
+    start: startTranslation,
+  };
+  const operationError = error && localizeText(error);
+  const notice = state.notice && localizeText(state.notice);
   const currentModelGuide = !!cachedGuide && cachedGuide.model === state.library.selectedModel;
   const rated = !dirty ? recall?.rating : undefined;
   const rate = (rating: Rating) => {
@@ -259,7 +300,9 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
     </header>
     <ChatGPTWelcome state={state} bridge={bridge} run={run} pending={pending} />
 
-    {(error || state.notice || draftStore.error) && <div className="notice-bar" role="alert"><div>{error && <p>{localizeText(error)}</p>}{state.notice && state.notice !== error && <p>{localizeText(state.notice)}</p>}{draftStore.error && <p>{errorMessage(new Error(draftStore.error))}</p>}</div>{error && <button className="icon-button" aria-label={t('app.closeError')} onClick={() => setError(null)}>×</button>}</div>}
+    <TranslationStatus activity={translationActivity} saved={translationSavedAt !== null}
+      onCancel={translationBusy ? () => bridge.cancelRequest() : undefined} onError={cause => setError(errorMessage(cause))} />
+    {(operationError || notice || draftStore.error) && <div className="notice-bar" role="alert"><div>{operationError && <p>{operationError}</p>}{notice && notice !== operationError && <p>{notice}</p>}{draftStore.error && <p>{errorMessage(new Error(draftStore.error))}</p>}</div>{error && <button className="icon-button" aria-label={t('app.closeError')} onClick={() => setError(null)}>×</button>}</div>}
 
     <div className={`workspace ${legacy ? 'legacy-workspace' : 'guided-workspace'}`}>
       <aside className="library-pane" aria-label={t('library.region')}>
@@ -292,17 +335,17 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
         }}>{t('document.delete')}</button>}</div>
       </aside>
 
-      {activeDocument && unit ? !legacy ? <StudyFlow key={activeDocument.id} scope={effectiveScope} scopeName={scopeName} bridge={bridge} doc={activeDocument} state={state} pending={operationPending} aiAvailable={aiAvailable} aiDisabledReason={aiDisabledReason} onConnect={() => setAccountOpen(true)} onBusyChange={busy => { pendingRef.current = busy; setFlowPending(busy); }} onLegacy={async reference => { await bridge.controlSpeech('stop'); if (reference) await bridge.openEvidence(reference); setHiddenSource(false); setLegacy(true); }} /> : <>
+      {activeDocument && unit ? !legacy ? <StudyFlow key={activeDocument.id} scope={effectiveScope} scopeName={scopeName} bridge={bridge} doc={activeDocument} state={state} translation={translation} pending={operationPending} aiAvailable={aiAvailable} aiDisabledReason={aiDisabledReason} onConnect={() => setAccountOpen(true)} onBusyChange={busy => { pendingRef.current = busy; setFlowPending(busy); }} onLegacy={async reference => { await bridge.controlSpeech('stop'); if (reference) await bridge.openEvidence(reference); setHiddenSource(false); setLegacy(true); }} /> : <>
         <main className="reading-pane" ref={readerRef} aria-label={t('study.readingRegion')}>
-          <div className="reading-topline"><span>{t('study.legacy')} <button className="text-button" disabled={pending || !!state.busy} onClick={() => run(async () => { await saveDraft(); await bridge.controlSpeech('stop'); setLegacy(false); })}>{t('study.together')}</button></span><span>{activeDocument.position + 1} / {activeDocument.units.length}</span></div>
+          <div className="reading-topline"><div className="reading-mode"><span>{t('study.legacy')}</span><button className="secondary-button reading-mode-button" disabled={pending || !!state.busy} onClick={() => run(async () => { await saveDraft(); await bridge.controlSpeech('stop'); setLegacy(false); })}>{t('study.together')}</button></div><span>{activeDocument.position + 1} / {activeDocument.units.length}</span></div>
           <h2 className="document-heading" lang="">{activeDocument.title}</h2>
           {activeDocument.sourceUrl && <p className="source-url" title={activeDocument.sourceUrl}>{t('common.sourceLabel', { name: activeDocument.sourceUrl })}</p>}
           {activeDocument.goal && <p className="learning-goal"><span>{t('document.goal')}</span>{activeDocument.goal}</p>}
           <div className="reading-progress"><span style={{ width: `${100 * activeDocument.readUnitIds.length / activeDocument.units.length}%` }} /></div>
           <div className="progress-copy"><span>{t('reading.read')} {activeDocument.readUnitIds.length}/{activeDocument.units.length}</span><span>{t('reading.progressHelp')}</span></div>
           <div className="source-heading"><h3>{unit.section || t('study.readingPassage', { index: activeDocument.position + 1 })}</h3><button className="text-button" aria-pressed={hiddenSource} onClick={() => setHiddenSource(hidden => !hidden)}>{hiddenSource ? t('reading.showAgain') : t('reading.hideRecall')}</button></div>
-          {hiddenSource ? <div className="hidden-source"><span className="hidden-source-symbol">◌</span><h3>{t('reading.recallTime')}</h3><p>{t('reading.recallHelp')}<br />{t('reading.recallRetryHelp')}</p><button className="secondary-button" onClick={() => setHiddenSource(false)}>{t('reading.checkSource')}</button></div> : <>{activeDocument.pdf && <PdfReader key={`pdf:${activeDocument.id}:${unit.id}`} bridge={bridge} doc={activeDocument} unit={unit} requestedPage={pdfPageRequest} pending={pending} />}<ReadingContent key={`${activeDocument.id}:${unit.id}`} bridge={bridge} documentId={activeDocument.id} unit={unit} pending={pending} onRead={() => perform(() => bridge.study({ type: 'mark-read', documentId: activeDocument.id, unitId: unit.id }))} onRecall={() => setHiddenSource(true)} /></>}
-          <div hidden={hiddenSource}><SourceTranslationPanel bridge={bridge} state={state} doc={activeDocument} unitId={unit.id} disabled={pending} /></div>
+          {hiddenSource ? <div className="hidden-source"><span className="hidden-source-symbol">◌</span><h3>{t('reading.recallTime')}</h3><p>{t('reading.recallHelp')}<br />{t('reading.recallRetryHelp')}</p><button className="secondary-button" onClick={() => setHiddenSource(false)}>{t('reading.checkSource')}</button></div> : <>{activeDocument.pdf && <PdfReader key={`pdf:${activeDocument.id}:${unit.id}`} bridge={bridge} doc={activeDocument} unit={unit} requestedPage={pdfPageRequest} pending={pending} />}<ReadingContent key={`${activeDocument.id}:${unit.id}`} bridge={bridge} documentId={activeDocument.id} passageVersion={activeDocument.passageVersion} unit={unit} pending={pending} onRead={() => perform(() => bridge.study({ type: 'mark-read', documentId: activeDocument.id, unitId: unit.id }))} onRecall={() => setHiddenSource(true)} /></>}
+          <div hidden={hiddenSource}><SourceTranslationPanel bridge={bridge} state={state} doc={activeDocument} unitId={unit.id} translation={translation} disabled={pending} /></div>
           <footer className="reading-footer"><div className="reading-status">{activeDocument.readUnitIds.includes(unit.id) ? <span>{t('reading.readDone')}</span> : <button className="secondary-button" disabled={pending} onClick={() => run(() => bridge.study({ type: 'mark-read', documentId: activeDocument.id, unitId: unit.id }))}>{t('reading.markRead')}</button>}</div><div className="reading-pagination"><button className="text-button" disabled={pending || activeDocument.position === 0} onClick={() => goToUnit(activeDocument.position - 1)}>{t('reading.previous')}</button><button className="primary-button" disabled={pending || activeDocument.position === activeDocument.units.length - 1} onClick={() => goToUnit(activeDocument.position + 1)}>{t('reading.next')}</button></div></footer>
           <p className="footer-note">{t('reading.navigationHelp')}</p>
         </main>
@@ -312,7 +355,7 @@ function AppContents({ bridge, state, setState, loadError, setLoadError }: {
             {!modelValid && <option value="" disabled>{state.library.selectedModel ? t('model.unavailable', { model: state.library.selectedModel }) : t('model.choose')}</option>}{state.models.map(model => <option key={model.slug} value={model.slug}>{modelDisplayName(model)}</option>)}
           </select><button className="icon-button refresh-button" title={t('model.refreshAccount')} aria-label={t('model.refresh')} disabled={bridge.mode === 'browser' || pending || !!state.busy} onClick={() => run(() => bridge.refreshModels())}>↻</button></div><ChatGPTUsage state={state} bridge={bridge} run={run} />{aiDisabledReason && <p className="model-explanation">{aiDisabledReason}{bridge.mode === 'desktop' && <button className="text-button" onClick={() => setAccountOpen(true)}>{t('account.openSettings')}</button>}</p>}</section>
 
-          {state.busy && (!activeBusy || (hiddenSource && state.busy.kind === 'translation')) && <div className="other-request">{t('reading.otherRequest', { kind: state.busy.kind === 'translation' ? t('translation.title') : state.busy.kind === 'guide' ? t('model.guide') : t('model.feedback') })}<button className="text-button" onClick={() => { void bridge.cancelRequest().catch(cause => setError(errorMessage(cause))); }}>{t('study.cancelRequest')}</button></div>}
+          {state.busy && state.busy.kind !== 'translation' && !activeBusy && <div className="other-request">{t('reading.otherRequest', { kind: state.busy.kind === 'guide' ? t('model.guide') : t('model.feedback') })}<button className="text-button" onClick={() => { void bridge.cancelRequest().catch(cause => setError(errorMessage(cause))); }}>{t('study.cancelRequest')}</button></div>}
           <section className="guide-section">{activeDocument.pdf && <p className="small-copy">{t('study.pdfUnsupported')}</p>}<div className="section-heading"><h2><span>01</span> {t('reading.understand')}</h2><button className="text-button" disabled={!aiAvailable || !!state.busy || pending} onClick={() => launch(() => bridge.requestGuide(activeDocument.id, unit.id))}>{currentModelGuide ? t('study.recheckGuide') : guide ? t('model.guideSelected') : t('model.getGuide')}</button></div>
             {activeBusy?.kind === 'guide' ? <div className="request-progress" role="status"><span className="loading-dot" /><strong>{t('model.generatingGuide')}</strong><p>{state.streamText ? t('study.received', { count: state.streamText.length }) : isOllamaModel(state.library.selectedModel) ? t('model.localWaiting') : t('model.waiting')}</p><button className="text-button" disabled={pending} onClick={() => run(() => bridge.cancelRequest())}>{t('model.cancelGeneration')}</button></div> : hiddenSource && guide ? <div className="guide-empty"><p>{t('reading.guideHidden')}</p><button className="text-button" onClick={() => setHiddenSource(false)}>{t('reading.showGuideSource')}</button></div> : guide ? <div className="guide-content"><p className="guide-overview" lang={guide.identity?.responseLanguage ?? 'ko'}>{guide.overview}</p><div className="key-points">{guide.keyPoints.map((point, index) => <div className="key-point" key={`${index}:${point.title}`}><h3>{point.title}</h3><p lang={guide.identity?.responseLanguage ?? 'ko'}>{point.explanation}</p>{point.quote && <blockquote lang="">{point.quote}</blockquote>}</div>)}</div><VisualEvidenceList responseLanguage={guide.identity?.responseLanguage ?? 'ko'} evidence={guide.visualEvidence} onPage={showPdfPage} /><p className="ai-source-note">{t('reading.checkGuide')}</p></div> : <div className="guide-empty"><p>{t('reading.readFirst')}</p><p>{t('reading.guideHelp')}</p></div>}
           </section>
